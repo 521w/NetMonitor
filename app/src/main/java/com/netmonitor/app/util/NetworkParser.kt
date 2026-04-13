@@ -191,10 +191,10 @@ object NetworkParser {
                 for (j in 0 until 4) {
                     val word = hexIp.substring(j * 8, j * 8 + 8)
                     val wordLong = word.toLong(16)
-                    bytes[j * 4 + 3] = (wordLong and 0xFF).toByte()
-                    bytes[j * 4 + 2] = ((wordLong shr 8) and 0xFF).toByte()
-                    bytes[j * 4 + 1] = ((wordLong shr 16) and 0xFF).toByte()
-                    bytes[j * 4] = ((wordLong shr 24) and 0xFF).toByte()
+                    bytes[j * 4] = (wordLong and 0xFF).toByte()
+                    bytes[j * 4 + 1] = ((wordLong shr 8) and 0xFF).toByte()
+                    bytes[j * 4 + 2] = ((wordLong shr 16) and 0xFF).toByte()
+                    bytes[j * 4 + 3] = ((wordLong shr 24) and 0xFF).toByte()
                 }
                 InetAddress.getByAddress(bytes).hostAddress ?: "::0"
             } catch (_: Exception) {
