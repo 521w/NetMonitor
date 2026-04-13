@@ -2,7 +2,6 @@ package com.netmonitor.app.util
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.util.Log
 import com.netmonitor.app.model.ConnectionInfo
 import java.io.File
 import java.net.InetAddress
@@ -10,16 +9,73 @@ import java.net.InetAddress
 object NetworkParser {
 
     private const val TAG = "NetworkParser"
-    private var rootChecked = false
-    private var rootAvailable = false
+    private var rootAvailable: Boolean? = null
+    private val uidNameCache = HashMap<Int, String>()
+    private var cacheBuilt = false
 
     private fun isRootAvailable(): Boolean {
-        if (!rootChecked) {
+        if (rootAvailable == null) {
             rootAvailable = RootShell.isRootAvailable()
-            rootChecked = true
-            Log.i(TAG, "Root available: $rootAvailable")
         }
-        return rootAvailable
+        return rootAvailable == true
+    }
+
+    private fun buildUidCache(context: Context) {
+        if (cacheBuilt) return
+        AppLogger.i(TAG, "Building UID cache...")
+        val startTime = System.currentTimeMillis()
+
+        // Step 1: PackageManager (works without root, gets most apps)
+        try {
+            val pm = context.packageManager
+            @Suppress("DEPRECATION")
+            val packages = pm.getInstalledPackages(0)
+            for (pkg in packages) {
+                val uid = pkg.applicationInfo?.uid ?: continue
+                val label = pm.getApplicationLabel(pkg.applicationInfo!!).toString()
+                uidNameCache[uid] = label
+            }
+            AppLogger.i(TAG, "PM cache: " + uidNameCache.size + " apps")
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "PM cache failed: " + e.message)
+        }
+
+        // Step 2: Root packages.list (gets system UIDs too)
+        if (isRootAvailable()) {
+            try {
+                val content = RootShell.readFileAsRoot("/data/system/packages.list")
+                if (content != null) {
+                    var added = 0
+                    for (line in content.lines()) {
+                        val parts = line.trim().split(" ")
+                        if (parts.size >= 2) {
+                            val pkgName = parts[0]
+                            val uid = parts[1].toIntOrNull() ?: continue
+                            if (!uidNameCache.containsKey(uid)) {
+                                uidNameCache[uid] = pkgName
+                                added++
+                            }
+                        }
+                    }
+                    AppLogger.i(TAG, "Root cache added: " + added + " more")
+                }
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "Root cache failed: " + e.message)
+            }
+        }
+
+        // Well-known system UIDs
+        uidNameCache.putIfAbsent(0, "root (kernel)")
+        uidNameCache.putIfAbsent(1000, "system")
+        uidNameCache.putIfAbsent(1001, "radio")
+        uidNameCache.putIfAbsent(1013, "mediaserver")
+        uidNameCache.putIfAbsent(1021, "gps")
+        uidNameCache.putIfAbsent(1051, "nfc")
+        uidNameCache.putIfAbsent(9999, "nobody")
+
+        cacheBuilt = true
+        val elapsed = System.currentTimeMillis() - startTime
+        AppLogger.i(TAG, "UID cache ready: " + uidNameCache.size + " entries in " + elapsed + "ms")
     }
 
     fun parseTcpConnections(context: Context): List<ConnectionInfo> {
@@ -37,38 +93,39 @@ object NetworkParser {
     }
 
     fun parseAllConnections(context: Context): List<ConnectionInfo> {
+        val startTime = System.currentTimeMillis()
+        buildUidCache(context)
+
         val connections = mutableListOf<ConnectionInfo>()
         connections.addAll(parseTcpConnections(context))
         connections.addAll(parseUdpConnections(context))
-        return connections.sortedByDescending { it.timestamp }
+
+        val sorted = connections.sortedByDescending { it.timestamp }
+        val elapsed = System.currentTimeMillis() - startTime
+        AppLogger.i(TAG, "Parsed " + sorted.size + " connections in " + elapsed + "ms")
+        return sorted
     }
 
     private fun readFileContent(path: String): List<String>? {
-        // Root优先：能获取所有进程的完整连接数据
+        // Root first: sees ALL connections from ALL processes
         if (isRootAvailable()) {
             try {
                 val content = RootShell.readFileAsRoot(path)
                 if (!content.isNullOrBlank()) {
-                    Log.d(TAG, "Read $path via root, ${content.lines().size} lines")
                     return content.lines()
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Root read failed for $path: ${e.message}")
-            }
+            } catch (_: Exception) {}
         }
 
-        // 降级：普通方式读取（只能看到自身进程的连接）
+        // Fallback: normal read (only own process connections on Android 10+)
         return try {
             val file = File(path)
             if (file.exists() && file.canRead()) {
-                val lines = file.readLines()
-                Log.d(TAG, "Read $path normally, ${lines.size} lines")
-                lines
+                file.readLines()
             } else {
                 null
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Normal read failed for $path: ${e.message}")
+        } catch (_: Exception) {
             null
         }
     }
@@ -104,7 +161,7 @@ object NetworkParser {
                             remotePort = remoteAddr.second,
                             state = state,
                             uid = uid,
-                            appName = getAppNameByUid(context, uid)
+                            appName = uidNameCache[uid] ?: ("UID:" + uid)
                         )
                     )
                 } catch (_: Exception) {
@@ -124,10 +181,10 @@ object NetworkParser {
 
         val ip = if (hexIp.length == 8) {
             val ipLong = hexIp.toLong(16)
-            "${(ipLong and 0xFF).toInt()}" +
-                ".${((ipLong shr 8) and 0xFF).toInt()}" +
-                ".${((ipLong shr 16) and 0xFF).toInt()}" +
-                ".${((ipLong shr 24) and 0xFF).toInt()}"
+            "" + (ipLong and 0xFF).toInt() +
+                "." + ((ipLong shr 8) and 0xFF).toInt() +
+                "." + ((ipLong shr 16) and 0xFF).toInt() +
+                "." + ((ipLong shr 24) and 0xFF).toInt()
         } else if (hexIp.length == 32) {
             try {
                 val bytes = ByteArray(16)
@@ -148,49 +205,6 @@ object NetworkParser {
         }
 
         return Pair(ip, port)
-    }
-
-    @Suppress("DEPRECATION")
-    private fun getAppNameByUid(context: Context, uid: Int): String {
-        return try {
-            val pm = context.packageManager
-            val packages = pm.getPackagesForUid(uid)
-            if (!packages.isNullOrEmpty()) {
-                val appInfo = pm.getApplicationInfo(packages[0], 0)
-                pm.getApplicationLabel(appInfo).toString()
-            } else if (isRootAvailable()) {
-                getRootAppName(uid)
-            } else {
-                "UID:$uid"
-            }
-        } catch (_: PackageManager.NameNotFoundException) {
-            if (isRootAvailable()) getRootAppName(uid) else "UID:$uid"
-        }
-    }
-
-    private fun getRootAppName(uid: Int): String {
-        return try {
-            val cmd = "dumpsys package | grep -A1 'userId=" + uid + "' | head -2"
-            val result = RootShell.execute(cmd)
-            if (result.isSuccess && result.output.isNotBlank()) {
-                val lines = result.output.lines()
-                for (line in lines) {
-                    val idx = line.indexOf("Package [")
-                    if (idx >= 0) {
-                        val start = idx + 9
-                        val end = line.indexOf("]", start)
-                        if (end > start) {
-                            return line.substring(start, end)
-                        }
-                    }
-                }
-                "UID:" + uid
-            } else {
-                "UID:" + uid
-            }
-        } catch (_: Exception) {
-            "UID:" + uid
-        }
     }
 
     fun getArpTable(): List<Map<String, String>> {
