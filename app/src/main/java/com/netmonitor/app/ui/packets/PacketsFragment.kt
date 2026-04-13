@@ -22,24 +22,22 @@ class PacketsFragment : Fragment() {
 
     private var _binding: FragmentPacketsBinding? = null
     private val binding get() = _binding!!
-    private val viewModel: MonitorViewModel
-        by activityViewModels()
+    private val viewModel: MonitorViewModel by activityViewModels()
     private lateinit var adapter: PacketAdapter
 
-    private val vpnPermissionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { result ->
-            if (result.resultCode == android.app.Activity.RESULT_OK) {
-                startVpnCapture()
-            } else {
-                Toast.makeText(
-                    requireContext(),
-                    "需要 VPN 权限才能抓包",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+    private val vpnPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            startVpnCapture()
+        } else {
+            Toast.makeText(
+                requireContext(),
+                "需要 VPN 权限才能抓包",
+                Toast.LENGTH_SHORT
+            ).show()
         }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -76,8 +74,7 @@ class PacketsFragment : Fragment() {
             viewModel.clearPackets()
         }
 
-        viewModel.isCapturing.observe(viewLifecycleOwner) {
-            capturing ->
+        viewModel.isCapturing.observe(viewLifecycleOwner) { capturing ->
             binding.btnToggleCapture.text =
                 if (capturing) "停止抓包" else "开始抓包"
         }
@@ -87,10 +84,8 @@ class PacketsFragment : Fragment() {
         ) { packets ->
             adapter.submitList(packets.take(500))
             binding.tvEmpty.visibility =
-                if (packets.isEmpty()) View.VISIBLE
-                else View.GONE
-            binding.tvPacketCount.text =
-                "已捕获 ${packets.size} 个数据包"
+                if (packets.isEmpty()) View.VISIBLE else View.GONE
+            binding.tvPacketCount.text = "已捕获 ${packets.size} 个数据包"
         }
     }
 
@@ -104,6 +99,11 @@ class PacketsFragment : Fragment() {
     }
 
     private fun startVpnCapture() {
+        // ★ 关键修复：启动前设置静态回调
+        PacketCaptureVpnService.onPacketCaptured = { packet ->
+            viewModel.addPacket(packet)
+        }
+
         val intent = Intent(
             requireContext(),
             PacketCaptureVpnService::class.java
@@ -123,13 +123,14 @@ class PacketsFragment : Fragment() {
         }
         requireContext().startService(intent)
         viewModel.setCapturing(false)
+
+        // ★ 关键修复：停止时清除回调
+        PacketCaptureVpnService.onPacketCaptured = null
     }
 
     private fun showPacketDetail(packet: PacketInfo) {
         val detail = """
-            |方向: ${if (packet.direction ==
-                PacketInfo.Direction.OUTBOUND) "出站 ↑"
-                else "入站 ↓"}
+            |方向: ${if (packet.direction == PacketInfo.Direction.OUTBOUND) "出站 ↑" else "入站 ↓"}
             |协议: ${packet.protocol}
             |源地址: ${packet.sourceIp}:${packet.sourcePort}
             |目标地址: ${packet.destIp}:${packet.destPort}
