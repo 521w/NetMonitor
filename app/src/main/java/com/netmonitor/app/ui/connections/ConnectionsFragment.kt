@@ -51,7 +51,6 @@ class ConnectionsFragment : Fragment() {
             onItemClick = { conn -> showConnectionDetail(conn) },
             onIpLookup = { ip -> lookupIp(ip) }
         )
-
         binding.rvConnections.layoutManager = LinearLayoutManager(requireContext())
         binding.rvConnections.adapter = adapter
 
@@ -62,6 +61,8 @@ class ConnectionsFragment : Fragment() {
         binding.chipListen.setOnClickListener { setFilter("listen") }
         binding.chipCloseWait.setOnClickListener { setFilter("close_wait") }
         binding.chipTimeWait.setOnClickListener { setFilter("time_wait") }
+        binding.chipIpExposed.setOnClickListener { setFilter("ip_exposed") }
+        binding.chipExposedListener.setOnClickListener { setFilter("exposed_listener") }
 
         binding.etSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -93,6 +94,8 @@ class ConnectionsFragment : Fragment() {
             "listen" -> filtered.filter { it.displayState == "LISTEN" }
             "close_wait" -> filtered.filter { it.displayState == "CLOSE_WAIT" }
             "time_wait" -> filtered.filter { it.displayState == "TIME_WAIT" }
+            "ip_exposed" -> filtered.filter { it.isRealIpExposed }
+            "exposed_listener" -> filtered.filter { it.isExposedListener }
             else -> filtered
         }
 
@@ -100,30 +103,47 @@ class ConnectionsFragment : Fragment() {
             val query = searchText.lowercase()
             filtered = filtered.filter { conn ->
                 conn.localIp.lowercase().contains(query) ||
-                    conn.remoteIp.lowercase().contains(query) ||
-                    conn.localPort.toString().contains(query) ||
-                    conn.remotePort.toString().contains(query) ||
-                    conn.appName.lowercase().contains(query) ||
-                    conn.protocol.lowercase().contains(query)
+                        conn.remoteIp.lowercase().contains(query) ||
+                        conn.localPort.toString().contains(query) ||
+                        conn.remotePort.toString().contains(query) ||
+                        conn.appName.lowercase().contains(query) ||
+                        conn.protocol.lowercase().contains(query)
             }
         }
 
         adapter.submitList(filtered)
-        binding.tvConnectionCount.text = "共 " + filtered.size + " 个连接"
+        binding.tvConnectionCount.text = when (currentFilter) {
+            "ip_exposed" -> "\u26a0 \u771f\u5b9eIP\u66b4\u9732: ${filtered.size} \u4e2a\u8fde\u63a5"
+            "exposed_listener" -> "\u26a0 \u7aef\u53e3\u66b4\u9732: ${filtered.size} \u4e2a\u76d1\u542c"
+            else -> "\u5171 ${filtered.size} \u4e2a\u8fde\u63a5"
+        }
     }
 
     private fun showConnectionDetail(conn: ConnectionInfo) {
         val ctx = context ?: return
 
         val sb = StringBuilder()
-        sb.appendLine("协议: " + conn.protocol)
-        sb.appendLine("状态: " + conn.displayState)
+        sb.appendLine("\u534f\u8bae: " + conn.protocol)
+        sb.appendLine("\u72b6\u6001: " + conn.displayState)
         sb.appendLine("")
-        sb.appendLine("本地地址: " + conn.localIp + ":" + conn.localPort)
-        sb.appendLine("远程地址: " + conn.remoteIp + ":" + conn.remotePort)
+        sb.appendLine("\u672c\u5730\u5730\u5740: " + conn.localIp + ":" + conn.localPort)
+        sb.appendLine("\u8fdc\u7a0b\u5730\u5740: " + conn.remoteIp + ":" + conn.remotePort)
         sb.appendLine("")
-        sb.appendLine("应用: " + conn.appName)
+        sb.appendLine("\u5e94\u7528: " + conn.appName)
         sb.appendLine("UID: " + conn.uid)
+
+        if (conn.isRealIpExposed) {
+            sb.appendLine("")
+            sb.appendLine("\u26a0 \u8b66\u544a: \u8be5\u8fde\u63a5\u66b4\u9732\u4e86\u60a8\u7684\u771f\u5b9eIP\u5730\u5740\uff01")
+            sb.appendLine("  \u672c\u5730\u5730\u5740 ${conn.localIp} \u662f\u516c\u7f51IP\uff0c")
+            sb.appendLine("  \u8bf4\u660e\u6b64\u8fde\u63a5\u672a\u901a\u8fc7VPN/\u4ee3\u7406\uff0c\u76f4\u63a5\u66b4\u9732\u771f\u5b9e\u8eab\u4efd\u3002")
+        }
+        if (conn.isExposedListener) {
+            sb.appendLine("")
+            sb.appendLine("\u26a0 \u8b66\u544a: \u8be5\u7aef\u53e3\u76d1\u542c\u5728\u6240\u6709\u7f51\u5361\uff01")
+            sb.appendLine("  \u540c\u4e00\u5c40\u57df\u7f51\u5185\u5176\u4ed6\u8bbe\u5907\u53ef\u4ee5\u8fde\u63a5\u6b64\u7aef\u53e3\u3002")
+            sb.appendLine("  \u5728\u516c\u5171WiFi\u4e0b\u5b58\u5728\u5b89\u5168\u98ce\u9669\u3002")
+        }
 
         val scrollView = ScrollView(ctx)
         val textView = TextView(ctx).apply {
@@ -135,38 +155,34 @@ class ConnectionsFragment : Fragment() {
         scrollView.addView(textView)
 
         AlertDialog.Builder(ctx)
-            .setTitle("连接详情")
+            .setTitle("\u8fde\u63a5\u8be6\u60c5")
             .setView(scrollView)
-            .setPositiveButton("确定", null)
-            .setNeutralButton("查询远程IP") { _, _ ->
+            .setPositiveButton("\u786e\u5b9a", null)
+            .setNeutralButton("\u67e5\u8be2\u8fdc\u7a0bIP") { _, _ ->
                 lookupIp(conn.remoteIp)
             }
-            .setNegativeButton("复制") { _, _ ->
+            .setNegativeButton("\u590d\u5236") { _, _ ->
                 val clipboard = ctx.getSystemService(
                     android.content.Context.CLIPBOARD_SERVICE
                 ) as android.content.ClipboardManager
                 val clip = android.content.ClipData.newPlainText("connection", sb.toString())
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, "\u5df2\u590d\u5236", Toast.LENGTH_SHORT).show()
             }
             .show()
     }
 
     private fun lookupIp(ip: String) {
         val ctx = context ?: return
-
         if (IpLocator.isLocalIp(ip)) {
-            Toast.makeText(ctx, "这是本机/局域网地址，无需查询", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, "\u8fd9\u662f\u672c\u673a/\u5c40\u57df\u7f51\u5730\u5740\uff0c\u65e0\u9700\u67e5\u8be2", Toast.LENGTH_SHORT).show()
             return
         }
-
-        Toast.makeText(ctx, "正在查询 " + ip + " ...", Toast.LENGTH_SHORT).show()
-
+        Toast.makeText(ctx, "\u6b63\u5728\u67e5\u8be2 $ip ...", Toast.LENGTH_SHORT).show()
         viewLifecycleOwner.lifecycleScope.launch {
             val info = withContext(Dispatchers.IO) {
                 IpLocator.lookup(ip)
             }
-
             if (_binding != null) {
                 val scrollView = ScrollView(ctx)
                 val textView = TextView(ctx).apply {
@@ -176,18 +192,17 @@ class ConnectionsFragment : Fragment() {
                     setTextIsSelectable(true)
                 }
                 scrollView.addView(textView)
-
                 AlertDialog.Builder(ctx)
-                    .setTitle("IP 归属地查询")
+                    .setTitle("IP \u5f52\u5c5e\u5730\u67e5\u8be2")
                     .setView(scrollView)
-                    .setPositiveButton("确定", null)
-                    .setNeutralButton("复制") { _, _ ->
+                    .setPositiveButton("\u786e\u5b9a", null)
+                    .setNeutralButton("\u590d\u5236") { _, _ ->
                         val clipboard = ctx.getSystemService(
                             android.content.Context.CLIPBOARD_SERVICE
                         ) as android.content.ClipboardManager
                         val clip = android.content.ClipData.newPlainText("ip_info", info.format())
                         clipboard.setPrimaryClip(clip)
-                        Toast.makeText(ctx, "已复制", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, "\u5df2\u590d\u5236", Toast.LENGTH_SHORT).show()
                     }
                     .show()
             }
