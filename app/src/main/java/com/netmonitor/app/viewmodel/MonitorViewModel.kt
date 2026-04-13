@@ -115,7 +115,9 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                 activeConnections = allConns.count { it.isActive },
                 listeningPorts = allConns.count { it.displayState == "LISTEN" },
                 tcpCount = allConns.count { it.protocol == "TCP" },
-                udpCount = allConns.count { it.protocol == "UDP" }
+                udpCount = allConns.count { it.protocol == "UDP" },
+                realIpExposedCount = allConns.count { it.isRealIpExposed },
+                exposedListenerCount = allConns.count { it.isExposedListener }
             )
             applyConnectionFilter(allConns)
         }
