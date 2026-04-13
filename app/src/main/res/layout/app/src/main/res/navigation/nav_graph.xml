@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/navigation_home">
+
+    <fragment
+        android:id="@+id/navigation_home"
+        android:name="com.netmonitor.app.ui.home.HomeFragment"
+        android:label="@string/title_home" />
+
+    <fragment
+        android:id="@+id/navigation_connections"
+        android:name="com.netmonitor.app.ui.connections.ConnectionsFragment"
+        android:label="@string/title_connections" />
+
+    <fragment
+        android:id="@+id/navigation_packets"
+        android:name="com.netmonitor.app.ui.packets.PacketsFragment"
+        android:label="@string/title_packets" />
+
+    <fragment
+        android:id="@+id/navigation_settings"
+        android:name="com.netmonitor.app.ui.settings.SettingsFragment"
+        android:label="@string/title_settings" />
+
+</navigation>
