@@ -5,4 +5,7 @@
     <color name="state_other">#9E9E9E</color>
     <color name="protocol_tcp">#2196F3</color>
     <color name="protocol_udp">#9C27B0</color>
+    <color name="protocol_other">#757575</color>
+    <color name="direction_out">#E53935</color>
+    <color name="direction_in">#43A047</color>
 </resources>
