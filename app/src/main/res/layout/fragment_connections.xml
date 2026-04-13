@@ -23,7 +23,8 @@
         android:layout_height="wrap_content"
         android:scrollbars="none"
         android:paddingStart="8dp"
-        android:paddingEnd="8dp">
+        android:paddingEnd="8dp"
+        android:paddingBottom="4dp">
 
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/chip_group_filter"
@@ -69,4 +70,53 @@
                 android:id="@+id/chip_listen"
                 style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap
+                android:layout_height="wrap_content"
+                android:text="监听中"
+                android:checkable="true" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_close_wait"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="等待关闭"
+                android:checkable="true" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_time_wait"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="TIME_WAIT"
+                android:checkable="true" />
+
+        </com.google.android.material.chip.ChipGroup>
+    </HorizontalScrollView>
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/et_search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="6dp"
+        android:hint="搜索 IP、端口、应用名..."
+        android:inputType="text"
+        android:textSize="14sp"
+        android:drawableStart="@android:drawable/ic_menu_search"
+        android:drawablePadding="8dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:background="@android:drawable/edit_text" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_connections"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="16dp" />
+
+</LinearLayout>
