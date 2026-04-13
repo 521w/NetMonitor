@@ -122,13 +122,14 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_view_exposure_log"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="切换到「连接」页面，点击对应筛选器查看详情"
-                    android:textSize="11sp"
-                    android:textColor="#999999" />
+                    android:text="📋 查看历史记录"
+                    android:textColor="#F44336" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
