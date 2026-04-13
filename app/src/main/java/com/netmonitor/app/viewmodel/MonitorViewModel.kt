@@ -36,13 +36,10 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     private val _stats = MutableLiveData(NetworkStats())
     val stats: LiveData<NetworkStats> = _stats
 
-    private val _filteredConnections =
-        MutableLiveData<List<ConnectionInfo>>(emptyList())
-    val filteredConnections: LiveData<List<ConnectionInfo>> =
-        _filteredConnections
+    private val _filteredConnections = MutableLiveData<List<ConnectionInfo>>(emptyList())
+    val filteredConnections: LiveData<List<ConnectionInfo>> = _filteredConnections
 
-    private val _filteredPackets =
-        MutableLiveData<List<PacketInfo>>(emptyList())
+    private val _filteredPackets = MutableLiveData<List<PacketInfo>>(emptyList())
     val filteredPackets: LiveData<List<PacketInfo>> = _filteredPackets
 
     private var monitorJob: Job? = null
@@ -52,6 +49,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     fun startMonitoring() {
         if (_isMonitoring.value == true) return
         _isMonitoring.value = true
+
         monitorJob = viewModelScope.launch {
             while (isActive) {
                 refreshConnections()
@@ -76,62 +74,56 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun addPacket(packet: PacketInfo) {
+        val snapshot: List<PacketInfo>
         synchronized(packetBuffer) {
             packetBuffer.add(0, packet)
             if (packetBuffer.size > maxPacketBuffer) {
                 packetBuffer.removeAt(packetBuffer.lastIndex)
             }
+            snapshot = packetBuffer.toList()
         }
-        _packets.postValue(packetBuffer.toList())
-        applyPacketFilter()
+        _packets.postValue(snapshot)
+        val filter = _filterConfig.value ?: FilterConfig()
+        _filteredPackets.postValue(snapshot.filter { filter.matchesPacket(it) })
     }
 
     fun clearPackets() {
-        synchronized(packetBuffer) { packetBuffer.clear() }
+        synchronized(packetBuffer) {
+            packetBuffer.clear()
+        }
         _packets.postValue(emptyList())
         _filteredPackets.postValue(emptyList())
     }
 
     fun updateFilter(config: FilterConfig) {
         _filterConfig.value = config
-        applyConnectionFilter()
-        applyPacketFilter()
+        applyConnectionFilter(_connections.value ?: emptyList())
+        val packets = _packets.value ?: emptyList()
+        _filteredPackets.value = packets.filter { config.matchesPacket(it) }
     }
 
     private suspend fun refreshConnections() {
-        withContext(Dispatchers.IO) {
+        val allConns = withContext(Dispatchers.IO) {
             val ctx = getApplication<Application>()
-            val allConns = NetworkParser.parseAllConnections(ctx)
-            _connections.postValue(allConns)
-            _stats.postValue(
-                NetworkStats(
-                    totalConnections = allConns.size,
-                    activeConnections = allConns.count { it.isActive },
-                    listeningPorts = allConns.count {
-                        it.displayState == "LISTEN"
-                    },
-                    tcpCount = allConns.count { it.protocol == "TCP" },
-                    udpCount = allConns.count { it.protocol == "UDP" }
-                )
-            )
+            NetworkParser.parseAllConnections(ctx)
         }
-        applyConnectionFilter()
+
+        withContext(Dispatchers.Main) {
+            _connections.value = allConns
+            _stats.value = NetworkStats(
+                totalConnections = allConns.size,
+                activeConnections = allConns.count { it.isActive },
+                listeningPorts = allConns.count { it.displayState == "LISTEN" },
+                tcpCount = allConns.count { it.protocol == "TCP" },
+                udpCount = allConns.count { it.protocol == "UDP" }
+            )
+            applyConnectionFilter(allConns)
+        }
     }
 
-    private fun applyConnectionFilter() {
+    private fun applyConnectionFilter(allConns: List<ConnectionInfo>) {
         val filter = _filterConfig.value ?: FilterConfig()
-        _filteredConnections.postValue(
-            (_connections.value ?: emptyList()).filter { filter.matches(it) }
-        )
-    }
-
-    private fun applyPacketFilter() {
-        val filter = _filterConfig.value ?: FilterConfig()
-        _filteredPackets.postValue(
-            (_packets.value ?: emptyList()).filter {
-                filter.matchesPacket(it)
-            }
-        )
+        _filteredConnections.value = allConns.filter { filter.matches(it) }
     }
 
     override fun onCleared() {
