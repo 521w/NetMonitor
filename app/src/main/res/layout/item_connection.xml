@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="12dp">
+
+    <View
+        android:id="@+id/viewStateIndicator"
+        android:layout_width="4dp"
+        android:layout_height="0dp"
+        android:background="@color/state_other"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+    <TextView
+        android:id="@+id/tvProtocol"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:textStyle="bold"
+        android:textSize="14sp"
+        app:layout_constraintStart_toEndOf="@id/viewStateIndicator"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="TCP" />
+
+    <TextView
+        android:id="@+id/tvState"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:textSize="12sp"
+        app:layout_constraintStart_toEndOf="@id/tvProtocol"
+        app:layout_constraintTop_toTopOf="@id/tvProtocol"
+        app:layout_constraintBottom_toBottomOf="@id/tvProtocol"
+        tools:text="ESTABLISHED" />
+
+    <TextView
+        android:id="@+id/tvAppName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="?android:textColorSecondary"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="com.example.app" />
+
+    <TextView
+        android:id="@+id/tvLocalAddress"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="4dp"
+        android:textSize="13sp"
+        app:layout_constraintStart_toEndOf="@id/viewStateIndicator"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvProtocol"
+        tools:text="Local: 192.168.1.1:8080" />
+
+    <TextView
+        android:id="@+id/tvRemoteAddress"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="2dp"
+        android:textSize="13sp"
+        app:layout_constraintStart_toEndOf="@id/viewStateIndicator"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvLocalAddress"
+        tools:text="Remote: 142.250.80.46:443" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
