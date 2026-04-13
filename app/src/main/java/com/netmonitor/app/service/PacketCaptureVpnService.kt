@@ -37,9 +37,17 @@ class PacketCaptureVpnService : VpnService() {
             .setSession("NetMonitor VPN")
             .addAddress("10.0.0.2", 32)
             .addRoute("0.0.0.0", 0)
-            .addRoute("::", 0)          // ← 新增：IPv6 路由
+            .addRoute("::", 0)
+            .addDnsServer("8.8.8.8")
+            .addDnsServer("8.8.4.4")
+            .addDnsServer("2001:4860:4860::8888")
             .setMtu(1500)
             .setBlocking(false)
+
+        // 排除自身流量，防止回环
+        try {
+            builder.addDisallowedApplication(packageName)
+        } catch (_: Exception) {}
 
         vpnInterface = builder.establish() ?: return
 
@@ -48,22 +56,22 @@ class PacketCaptureVpnService : VpnService() {
         captureJob = scope.launch {
             val fd = vpnInterface!!.fileDescriptor
             val input = FileInputStream(fd)
-            val output = FileOutputStream(fd)     // ← 新增：写回通道
-            val buffer = ByteArray(65535)          // ← 修改：65535
+            val output = FileOutputStream(fd)
+            val buffer = ByteArray(65535)
 
             while (isActive) {
                 try {
                     val length = input.read(buffer)
                     if (length > 0) {
-                        // ★ 关键修复：把数据包写回隧道，否则全部断网
+                        // 写回隧道，保持网络通畅
                         output.write(buffer, 0, length)
-
+                        output.flush()
                         processPacket(buffer, length)
                     } else {
-                        delay(50)   // ← 修改：降低空转频率
+                        delay(10)
                     }
                 } catch (e: Exception) {
-                    if (isActive) delay(100)
+                    if (isActive) delay(50)
                 }
             }
         }
@@ -72,7 +80,6 @@ class PacketCaptureVpnService : VpnService() {
     private fun processPacket(data: ByteArray, length: Int) {
         try {
             val version = (data[0].toInt() shr 4) and 0xF
-
             val srcIp: String
             val dstIp: String
             val protocol: Int
@@ -95,9 +102,8 @@ class PacketCaptureVpnService : VpnService() {
                         ".${data[19].toInt() and 0xFF}"
                 }
                 6 -> {
-                    // ← 新增：IPv6 解析
-                    protocol = data[6].toInt() and 0xFF  // Next Header
-                    headerLength = 40  // IPv6 固定头部 40 字节
+                    protocol = data[6].toInt() and 0xFF
+                    headerLength = 40
                     srcIp = formatIpv6(data, 8)
                     dstIp = formatIpv6(data, 24)
                 }
@@ -124,15 +130,15 @@ class PacketCaptureVpnService : VpnService() {
                     }
                 }
                 1 -> protoName = "ICMP"
-                58 -> protoName = "ICMPv6"   // ← 新增
+                58 -> protoName = "ICMPv6"
                 else -> protoName = "OTHER($protocol)"
             }
 
             val direction = if (srcIp.startsWith("10.0.0."))
                 PacketInfo.Direction.OUTBOUND
-            else PacketInfo.Direction.INBOUND
+            else
+                PacketInfo.Direction.INBOUND
 
-            // ★ 关键修复：使用静态回调
             onPacketCaptured?.invoke(
                 PacketInfo(
                     protocol = protoName,
@@ -144,10 +150,10 @@ class PacketCaptureVpnService : VpnService() {
                     direction = direction
                 )
             )
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+        }
     }
 
-    // ← 新增：IPv6 地址格式化
     private fun formatIpv6(data: ByteArray, offset: Int): String {
         val sb = StringBuilder()
         for (i in 0 until 8) {
@@ -167,23 +173,24 @@ class PacketCaptureVpnService : VpnService() {
         stopSelf()
     }
 
-    private fun createNotification() = NotificationCompat.Builder(
-        this, NetMonitorApp.CHANNEL_CAPTURE
-    )
-        .setContentTitle("抓包服务运行中")
-        .setContentText("正在捕获网络数据包...")
-        .setSmallIcon(R.drawable.ic_capture)
-        .setContentIntent(
-            PendingIntent.getActivity(
-                this, 0,
-                Intent(this, MainActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or
-                    PendingIntent.FLAG_IMMUTABLE
-            )
+    private fun createNotification() =
+        NotificationCompat.Builder(
+            this, NetMonitorApp.CHANNEL_CAPTURE
         )
-        .setOngoing(true)
-        .setSilent(true)
-        .build()
+            .setContentTitle("抓包服务运行中")
+            .setContentText("正在捕获网络数据包...")
+            .setSmallIcon(R.drawable.ic_capture)
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    this, 0,
+                    Intent(this, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or
+                        PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+            .setOngoing(true)
+            .setSilent(true)
+            .build()
 
     override fun onDestroy() {
         super.onDestroy()
@@ -199,7 +206,6 @@ class PacketCaptureVpnService : VpnService() {
         const val ACTION_STOP = "com.netmonitor.action.STOP_CAPTURE"
         const val NOTIFICATION_ID = 1002
 
-        // ★ 关键修复：静态回调，让 PacketsFragment 可以设置
         var onPacketCaptured: ((PacketInfo) -> Unit)? = null
     }
 }
