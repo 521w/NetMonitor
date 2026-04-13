@@ -11,18 +11,19 @@ import com.netmonitor.app.R
 import com.netmonitor.app.model.PacketInfo
 import kotlinx.coroutines.*
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.nio.ByteBuffer
 
 class PacketCaptureVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
     private var captureJob: Job? = null
-    private val scope =
-        CoroutineScope(Dispatchers.IO + SupervisorJob())
-    var onPacketCaptured: ((PacketInfo) -> Unit)? = null
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onStartCommand(
-        intent: Intent?, flags: Int, startId: Int
+        intent: Intent?,
+        flags: Int,
+        startId: Int
     ): Int {
         when (intent?.action) {
             ACTION_START -> startCapture()
@@ -36,26 +37,30 @@ class PacketCaptureVpnService : VpnService() {
             .setSession("NetMonitor VPN")
             .addAddress("10.0.0.2", 32)
             .addRoute("0.0.0.0", 0)
+            .addRoute("::", 0)          // ← 新增：IPv6 路由
             .setMtu(1500)
             .setBlocking(false)
 
         vpnInterface = builder.establish() ?: return
+
         startForeground(NOTIFICATION_ID, createNotification())
 
         captureJob = scope.launch {
-            val input = FileInputStream(
-                vpnInterface!!.fileDescriptor
-            )
-            val buffer = ByteBuffer.allocate(32767)
+            val fd = vpnInterface!!.fileDescriptor
+            val input = FileInputStream(fd)
+            val output = FileOutputStream(fd)     // ← 新增：写回通道
+            val buffer = ByteArray(65535)          // ← 修改：65535
+
             while (isActive) {
                 try {
-                    buffer.clear()
-                    val length = input.read(buffer.array())
+                    val length = input.read(buffer)
                     if (length > 0) {
-                        buffer.limit(length)
+                        // ★ 关键修复：把数据包写回隧道，否则全部断网
+                        output.write(buffer, 0, length)
+
                         processPacket(buffer, length)
                     } else {
-                        delay(10)
+                        delay(50)   // ← 修改：降低空转频率
                     }
                 } catch (e: Exception) {
                     if (isActive) delay(100)
@@ -64,64 +69,70 @@ class PacketCaptureVpnService : VpnService() {
         }
     }
 
-    private fun processPacket(buffer: ByteBuffer, length: Int) {
+    private fun processPacket(data: ByteArray, length: Int) {
         try {
-            val version = (buffer.get(0).toInt() shr 4) and 0xF
-            if (version != 4) return
+            val version = (data[0].toInt() shr 4) and 0xF
 
-            val protocol = buffer.get(9).toInt() and 0xFF
-            val headerLength =
-                (buffer.get(0).toInt() and 0x0F) * 4
-
-            val srcIp = "${buffer.get(12).toInt() and 0xFF}" +
-                ".${buffer.get(13).toInt() and 0xFF}" +
-                ".${buffer.get(14).toInt() and 0xFF}" +
-                ".${buffer.get(15).toInt() and 0xFF}"
-            val dstIp = "${buffer.get(16).toInt() and 0xFF}" +
-                ".${buffer.get(17).toInt() and 0xFF}" +
-                ".${buffer.get(18).toInt() and 0xFF}" +
-                ".${buffer.get(19).toInt() and 0xFF}"
-
+            val srcIp: String
+            val dstIp: String
+            val protocol: Int
+            val headerLength: Int
             val protoName: String
             var srcPort = 0
             var dstPort = 0
+
+            when (version) {
+                4 -> {
+                    protocol = data[9].toInt() and 0xFF
+                    headerLength = (data[0].toInt() and 0x0F) * 4
+                    srcIp = "${data[12].toInt() and 0xFF}" +
+                        ".${data[13].toInt() and 0xFF}" +
+                        ".${data[14].toInt() and 0xFF}" +
+                        ".${data[15].toInt() and 0xFF}"
+                    dstIp = "${data[16].toInt() and 0xFF}" +
+                        ".${data[17].toInt() and 0xFF}" +
+                        ".${data[18].toInt() and 0xFF}" +
+                        ".${data[19].toInt() and 0xFF}"
+                }
+                6 -> {
+                    // ← 新增：IPv6 解析
+                    protocol = data[6].toInt() and 0xFF  // Next Header
+                    headerLength = 40  // IPv6 固定头部 40 字节
+                    srcIp = formatIpv6(data, 8)
+                    dstIp = formatIpv6(data, 24)
+                }
+                else -> return
+            }
 
             when (protocol) {
                 6 -> {
                     protoName = "TCP"
                     if (length >= headerLength + 4) {
-                        srcPort = ((buffer.get(headerLength)
-                            .toInt() and 0xFF) shl 8) or
-                            (buffer.get(headerLength + 1)
-                                .toInt() and 0xFF)
-                        dstPort = ((buffer.get(headerLength + 2)
-                            .toInt() and 0xFF) shl 8) or
-                            (buffer.get(headerLength + 3)
-                                .toInt() and 0xFF)
+                        srcPort = ((data[headerLength].toInt() and 0xFF) shl 8) or
+                            (data[headerLength + 1].toInt() and 0xFF)
+                        dstPort = ((data[headerLength + 2].toInt() and 0xFF) shl 8) or
+                            (data[headerLength + 3].toInt() and 0xFF)
                     }
                 }
                 17 -> {
                     protoName = "UDP"
                     if (length >= headerLength + 4) {
-                        srcPort = ((buffer.get(headerLength)
-                            .toInt() and 0xFF) shl 8) or
-                            (buffer.get(headerLength + 1)
-                                .toInt() and 0xFF)
-                        dstPort = ((buffer.get(headerLength + 2)
-                            .toInt() and 0xFF) shl 8) or
-                            (buffer.get(headerLength + 3)
-                                .toInt() and 0xFF)
+                        srcPort = ((data[headerLength].toInt() and 0xFF) shl 8) or
+                            (data[headerLength + 1].toInt() and 0xFF)
+                        dstPort = ((data[headerLength + 2].toInt() and 0xFF) shl 8) or
+                            (data[headerLength + 3].toInt() and 0xFF)
                     }
                 }
                 1 -> protoName = "ICMP"
+                58 -> protoName = "ICMPv6"   // ← 新增
                 else -> protoName = "OTHER($protocol)"
             }
 
-            val direction =
-                if (srcIp.startsWith("10.0.0."))
-                    PacketInfo.Direction.OUTBOUND
-                else PacketInfo.Direction.INBOUND
+            val direction = if (srcIp.startsWith("10.0.0."))
+                PacketInfo.Direction.OUTBOUND
+            else PacketInfo.Direction.INBOUND
 
+            // ★ 关键修复：使用静态回调
             onPacketCaptured?.invoke(
                 PacketInfo(
                     protocol = protoName,
@@ -136,6 +147,18 @@ class PacketCaptureVpnService : VpnService() {
         } catch (_: Exception) { }
     }
 
+    // ← 新增：IPv6 地址格式化
+    private fun formatIpv6(data: ByteArray, offset: Int): String {
+        val sb = StringBuilder()
+        for (i in 0 until 8) {
+            if (i > 0) sb.append(':')
+            val hi = data[offset + i * 2].toInt() and 0xFF
+            val lo = data[offset + i * 2 + 1].toInt() and 0xFF
+            sb.append(String.format("%x", (hi shl 8) or lo))
+        }
+        return sb.toString()
+    }
+
     private fun stopCapture() {
         captureJob?.cancel()
         vpnInterface?.close()
@@ -144,24 +167,23 @@ class PacketCaptureVpnService : VpnService() {
         stopSelf()
     }
 
-    private fun createNotification() =
-        NotificationCompat.Builder(
-            this, NetMonitorApp.CHANNEL_CAPTURE
-        )
-            .setContentTitle("抓包服务运行中")
-            .setContentText("正在捕获网络数据包...")
-            .setSmallIcon(R.drawable.ic_capture)
-            .setContentIntent(
-                PendingIntent.getActivity(
-                    this, 0,
-                    Intent(this, MainActivity::class.java),
-                    PendingIntent.FLAG_UPDATE_CURRENT
-                        or PendingIntent.FLAG_IMMUTABLE
-                )
+    private fun createNotification() = NotificationCompat.Builder(
+        this, NetMonitorApp.CHANNEL_CAPTURE
+    )
+        .setContentTitle("抓包服务运行中")
+        .setContentText("正在捕获网络数据包...")
+        .setSmallIcon(R.drawable.ic_capture)
+        .setContentIntent(
+            PendingIntent.getActivity(
+                this, 0,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                    PendingIntent.FLAG_IMMUTABLE
             )
-            .setOngoing(true)
-            .setSilent(true)
-            .build()
+        )
+        .setOngoing(true)
+        .setSilent(true)
+        .build()
 
     override fun onDestroy() {
         super.onDestroy()
@@ -173,10 +195,11 @@ class PacketCaptureVpnService : VpnService() {
     override fun onBind(intent: Intent?) = null
 
     companion object {
-        const val ACTION_START =
-            "com.netmonitor.action.START_CAPTURE"
-        const val ACTION_STOP =
-            "com.netmonitor.action.STOP_CAPTURE"
+        const val ACTION_START = "com.netmonitor.action.START_CAPTURE"
+        const val ACTION_STOP = "com.netmonitor.action.STOP_CAPTURE"
         const val NOTIFICATION_ID = 1002
+
+        // ★ 关键修复：静态回调，让 PacketsFragment 可以设置
+        var onPacketCaptured: ((PacketInfo) -> Unit)? = null
     }
 }
