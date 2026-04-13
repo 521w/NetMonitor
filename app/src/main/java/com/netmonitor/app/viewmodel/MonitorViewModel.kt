@@ -136,6 +136,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         val activeConnections: Int = 0,
         val listeningPorts: Int = 0,
         val tcpCount: Int = 0,
-        val udpCount: Int = 0
+        val udpCount: Int = 0,
+        val realIpExposedCount: Int = 0,
+        val exposedListenerCount: Int = 0
     )
-}
