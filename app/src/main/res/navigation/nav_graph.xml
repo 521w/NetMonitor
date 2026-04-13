@@ -23,4 +23,10 @@
         android:id="@+id/navigation_settings"
         android:name="com.netmonitor.app.ui.settings.SettingsFragment"
         android:label="@string/title_settings" />
+
+    <fragment
+        android:id="@+id/navigation_exposure_log"
+        android:name="com.netmonitor.app.ui.exposure.ExposureLogFragment"
+        android:label="\u66b4\u9732\u8bb0\u5f55" />
+
 </navigation>
