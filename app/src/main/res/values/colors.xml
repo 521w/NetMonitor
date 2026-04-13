@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="state_active">#4CAF50</color>
+    <color name="state_listen">#FF9800</color>
+    <color name="state_other">#9E9E9E</color>
+    <color name="protocol_tcp">#2196F3</color>
+    <color name="protocol_udp">#9C27B0</color>
+</resources>
