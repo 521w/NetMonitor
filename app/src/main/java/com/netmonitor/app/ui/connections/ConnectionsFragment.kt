@@ -1,106 +1,96 @@
 package com.netmonitor.app.ui.connections
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.netmonitor.app.R
 import com.netmonitor.app.databinding.FragmentConnectionsBinding
 import com.netmonitor.app.model.ConnectionInfo
-import com.netmonitor.app.ui.adapter.ConnectionAdapter
+import com.netmonitor.app.util.AppLogger
+import com.netmonitor.app.util.IpLocator
 import com.netmonitor.app.viewmodel.MonitorViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ConnectionsFragment : Fragment() {
 
     private var _binding: FragmentConnectionsBinding? = null
     private val binding get() = _binding!!
-    private val viewModel: MonitorViewModel
-        by activityViewModels()
+    private val viewModel: MonitorViewModel by activityViewModels()
     private lateinit var adapter: ConnectionAdapter
+
+    private var currentFilter = "all"
+    private var searchText = ""
+    private var allConnections: List<ConnectionInfo> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        _binding = FragmentConnectionsBinding.inflate(
-            inflater, container, false
-        )
+        _binding = FragmentConnectionsBinding.inflate(inflater, container, false)
         return binding.root
     }
 
-    override fun onViewCreated(
-        view: View, savedInstanceState: Bundle?
-    ) {
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        adapter = ConnectionAdapter { conn ->
-            showConnectionDetail(conn)
-        }
-        binding.recyclerConnections.layoutManager =
-            LinearLayoutManager(requireContext())
-        binding.recyclerConnections.adapter = adapter
+        adapter = ConnectionAdapter(
+            onItemClick = { conn -> showConnectionDetail(conn) },
+            onIpLookup = { ip -> lookupIp(ip) }
+        )
 
-        binding.swipeRefresh.setOnRefreshListener {
-            binding.swipeRefresh.isRefreshing = false
-        }
+        binding.rvConnections.layoutManager = LinearLayoutManager(requireContext())
+        binding.rvConnections.adapter = adapter
 
-        viewModel.filteredConnections.observe(
-            viewLifecycleOwner
-        ) { connections ->
-            adapter.submitList(connections)
-            binding.tvEmpty.visibility =
-                if (connections.isEmpty()) View.VISIBLE
-                else View.GONE
-            binding.tvConnectionCount.text =
-                "共 ${connections.size} 个连接"
-        }
-    }
+        // Chip filter
+        binding.chipAll.setOnClickListener { setFilter("all") }
+        binding.chipTcp.setOnClickListener { setFilter("tcp") }
+        binding.chipUdp.setOnClickListener { setFilter("udp") }
+        binding.chipEstablished.setOnClickListener { setFilter("established") }
+        binding.chipListen.setOnClickListener { setFilter("listen") }
+        binding.chipCloseWait.setOnClickListener { setFilter("close_wait") }
+        binding.chipTimeWait.setOnClickListener { setFilter("time_wait") }
 
-    private fun showConnectionDetail(
-        conn: ConnectionInfo
-    ) {
-        val detail = """
-            |协议: ${conn.protocol}
-            |状态: ${conn.displayState}
-            |本地地址: ${conn.localIp}:${conn.localPort}
-            |远程地址: ${conn.remoteIp}:${conn.remotePort}
-            |应用: ${conn.appName}
-            |UID: ${conn.uid}
-        """.trimMargin()
-
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("连接详情")
-            .setMessage(detail)
-            .setPositiveButton("关闭", null)
-            .setNeutralButton("复制 IP") { _, _ ->
-                val clipboard = requireContext()
-                    .getSystemService(
-                        Context.CLIPBOARD_SERVICE
-                    ) as ClipboardManager
-                clipboard.setPrimaryClip(
-                    ClipData.newPlainText(
-                        "IP", conn.remoteIp
-                    )
-                )
-                Toast.makeText(
-                    requireContext(),
-                    "已复制: ${conn.remoteIp}",
-                    Toast.LENGTH_SHORT
-                ).show()
+        // Search box
+        binding.etSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                searchText = s?.toString()?.trim() ?: ""
+                applyFilter()
             }
-            .show()
+        })
+
+        // Observe connections
+        viewModel.filteredConnections.observe(viewLifecycleOwner) { connections ->
+            allConnections = connections ?: emptyList()
+            applyFilter()
+        }
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
+    private fun setFilter(filter: String) {
+        currentFilter = filter
+        applyFilter()
     }
-}
+
+    private fun applyFilter() {
+        var filtered = allConnections
+
+        // Apply chip filter
+        filtered = when (currentFilter) {
+            "tcp" -> filtered.filter { it.protocol == "TCP" }
+            "udp" -> filtered.filter { it.protocol == "UDP" }
+            "established" -> filtered.filter { it.display
