@@ -10,14 +10,16 @@ import java.net.InetAddress
 object NetworkParser {
 
     private const val TAG = "NetworkParser"
-    private var useRoot: Boolean? = null
+    private var rootChecked = false
+    private var rootAvailable = false
 
-    private fun shouldUseRoot(): Boolean {
-        if (useRoot == null) {
-            useRoot = RootShell.isRootAvailable()
-            Log.i(TAG, "Root available: $useRoot")
+    private fun isRootAvailable(): Boolean {
+        if (!rootChecked) {
+            rootAvailable = RootShell.isRootAvailable()
+            rootChecked = true
+            Log.i(TAG, "Root available: $rootAvailable")
         }
-        return useRoot == true
+        return rootAvailable
     }
 
     fun parseTcpConnections(context: Context): List<ConnectionInfo> {
@@ -42,25 +44,32 @@ object NetworkParser {
     }
 
     private fun readFileContent(path: String): List<String>? {
+        // Root优先：能获取所有进程的完整连接数据
+        if (isRootAvailable()) {
+            try {
+                val content = RootShell.readFileAsRoot(path)
+                if (!content.isNullOrBlank()) {
+                    Log.d(TAG, "Read $path via root, ${content.lines().size} lines")
+                    return content.lines()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Root read failed for $path: ${e.message}")
+            }
+        }
+
+        // 降级：普通方式读取（只能看到自身进程的连接）
         return try {
             val file = File(path)
             if (file.exists() && file.canRead()) {
-                file.readLines()
-            } else if (shouldUseRoot()) {
-                Log.i(TAG, "Normal read failed for $path, trying root...")
-                val content = RootShell.readFileAsRoot(path)
-                content?.lines()
+                val lines = file.readLines()
+                Log.d(TAG, "Read $path normally, ${lines.size} lines")
+                lines
             } else {
                 null
             }
         } catch (e: Exception) {
-            if (shouldUseRoot()) {
-                Log.i(TAG, "Exception reading $path, fallback to root")
-                val content = RootShell.readFileAsRoot(path)
-                content?.lines()
-            } else {
-                null
-            }
+            Log.w(TAG, "Normal read failed for $path: ${e.message}")
+            null
         }
     }
 
@@ -149,13 +158,13 @@ object NetworkParser {
             if (!packages.isNullOrEmpty()) {
                 val appInfo = pm.getApplicationInfo(packages[0], 0)
                 pm.getApplicationLabel(appInfo).toString()
-            } else if (shouldUseRoot()) {
+            } else if (isRootAvailable()) {
                 getRootAppName(uid)
             } else {
                 "UID:$uid"
             }
         } catch (_: PackageManager.NameNotFoundException) {
-            if (shouldUseRoot()) getRootAppName(uid) else "UID:$uid"
+            if (isRootAvailable()) getRootAppName(uid) else "UID:$uid"
         }
     }
 
@@ -165,7 +174,9 @@ object NetworkParser {
                 "dumpsys package | grep -A1 'userId=$uid' | head -2"
             )
             if (result.isSuccess && result.output.isNotBlank()) {
-                val match = Regex("Package\\s+\\[(\\S+)]").find(result.output)
+                val match = Regex("Package\\s+\
+
+\[(\\S+)]").find(result.output)
                 match?.groupValues?.get(1) ?: "UID:$uid"
             } else {
                 "UID:$uid"
@@ -177,7 +188,7 @@ object NetworkParser {
 
     fun getArpTable(): List<Map<String, String>> {
         val entries = mutableListOf<Map<String, String>>()
-        val content = if (shouldUseRoot()) {
+        val content = if (isRootAvailable()) {
             RootShell.readFileAsRoot("/proc/net/arp")
         } else {
             try { File("/proc/net/arp").readText() } catch (_: Exception) { null }
@@ -205,37 +216,37 @@ object NetworkParser {
     }
 
     fun getNetworkInterfaces(): String? {
-        return if (shouldUseRoot()) {
+        return if (isRootAvailable()) {
             RootShell.getActiveInterfaces()
         } else null
     }
 
     fun getRoutingTable(): String? {
-        return if (shouldUseRoot()) {
+        return if (isRootAvailable()) {
             RootShell.getRoutingTable()
         } else null
     }
 
     fun getIptablesRules(): String? {
-        return if (shouldUseRoot()) {
+        return if (isRootAvailable()) {
             RootShell.getIptablesRules()
         } else null
     }
 
     fun getDnsConfig(): String? {
-        return if (shouldUseRoot()) {
+        return if (isRootAvailable()) {
             RootShell.getDnsInfo()
         } else null
     }
 
     fun getNetworkTrafficStats(): String? {
-        return if (shouldUseRoot()) {
+        return if (isRootAvailable()) {
             RootShell.getNetworkStats()
         } else null
     }
 
     fun getOpenPorts(): String? {
-        return if (shouldUseRoot()) {
+        return if (isRootAvailable()) {
             RootShell.getOpenPorts()
         } else null
     }
