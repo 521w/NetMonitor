@@ -2,84 +2,67 @@ package com.netmonitor.app.ui.adapter
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.netmonitor.app.R
 import com.netmonitor.app.databinding.ItemConnectionBinding
 import com.netmonitor.app.model.ConnectionInfo
 
 class ConnectionAdapter(
-    private val onItemClick: (ConnectionInfo) -> Unit = {}
-) : ListAdapter<ConnectionInfo,
-    ConnectionAdapter.ViewHolder>(DiffCallback()) {
+    private val onItemClick: (ConnectionInfo) -> Unit = {},
+    private val onIpLookup: (String) -> Unit = {}
+) : ListAdapter<ConnectionInfo, ConnectionAdapter.ViewHolder>(DiffCallback()) {
 
     inner class ViewHolder(
         private val binding: ItemConnectionBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(item: ConnectionInfo) {
-            binding.apply {
-                tvProtocol.text = item.protocol
-                tvLocalAddress.text =
-                    "${item.localIp}:${item.localPort}"
-                tvRemoteAddress.text =
-                    "${item.remoteIp}:${item.remotePort}"
-                tvState.text = item.displayState
-                tvAppName.text = item.appName
+            binding.tvProtocol.text = item.protocol
+            binding.tvState.text = item.displayState
+            binding.tvLocalAddr.text = item.localIp + ":" + item.localPort
+            binding.tvRemoteAddr.text = item.remoteIp + ":" + item.remotePort
+            binding.tvAppName.text = item.appName
 
-                tvProtocol.setBackgroundColor(
-                    ContextCompat.getColor(
-                        root.context,
-                        if (item.protocol == "TCP")
-                            R.color.protocol_tcp
-                        else R.color.protocol_udp
-                    )
-                )
+            val stateColor = when (item.displayState) {
+                "ESTABLISHED" -> 0xFF4CAF50.toInt()
+                "LISTEN" -> 0xFF2196F3.toInt()
+                "CLOSE_WAIT" -> 0xFFFF9800.toInt()
+                "TIME_WAIT" -> 0xFF9E9E9E.toInt()
+                else -> 0xFF757575.toInt()
+            }
+            binding.tvState.setTextColor(stateColor)
 
-                val stateColor = when {
-                    item.isActive -> R.color.state_active
-                    item.displayState == "LISTEN" ->
-                        R.color.state_listen
-                    else -> R.color.state_other
-                }
-                viewStateIndicator.setBackgroundColor(
-                    ContextCompat.getColor(
-                        root.context, stateColor
-                    )
-                )
-
-                root.setOnClickListener { onItemClick(item) }
+            binding.root.setOnClickListener { onItemClick(item) }
+            binding.root.setOnLongClickListener {
+                onIpLookup(item.remoteIp)
+                true
             }
         }
     }
 
-    override fun onCreateViewHolder(
-        parent: ViewGroup, viewType: Int
-    ) = ViewHolder(
-        ItemConnectionBinding.inflate(
-            LayoutInflater.from(parent.context),
-            parent, false
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val binding = ItemConnectionBinding.inflate(
+            LayoutInflater.from(parent.context), parent, false
         )
-    )
+        return ViewHolder(binding)
+    }
 
-    override fun onBindViewHolder(
-        holder: ViewHolder, position: Int
-    ) = holder.bind(getItem(position))
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        holder.bind(getItem(position))
+    }
 
-    private class DiffCallback :
-        DiffUtil.ItemCallback<ConnectionInfo>() {
-        override fun areItemsTheSame(
-            old: ConnectionInfo, new: ConnectionInfo
-        ) = old.localIp == new.localIp
-            && old.localPort == new.localPort
-            && old.remoteIp == new.remoteIp
-            && old.remotePort == new.remotePort
-            && old.protocol == new.protocol
+    class DiffCallback : DiffUtil.ItemCallback<ConnectionInfo>() {
+        override fun areItemsTheSame(old: ConnectionInfo, new: ConnectionInfo): Boolean {
+            return old.localIp == new.localIp &&
+                old.localPort == new.localPort &&
+                old.remoteIp == new.remoteIp &&
+                old.remotePort == new.remotePort &&
+                old.protocol == new.protocol
+        }
 
-        override fun areContentsTheSame(
-            old: ConnectionInfo, new: ConnectionInfo
-        ) = old == new
+        override fun areContentsTheSame(old: ConnectionInfo, new: ConnectionInfo): Boolean {
+            return old == new
+        }
     }
 }
