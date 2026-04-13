@@ -142,3 +142,4 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         val realIpExposedCount: Int = 0,
         val exposedListenerCount: Int = 0
     )
+}
