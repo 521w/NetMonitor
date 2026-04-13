@@ -4,10 +4,12 @@ import android.util.Log
 import java.io.BufferedReader
 import java.io.DataOutputStream
 import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 
 object RootShell {
 
     private const val TAG = "RootShell"
+    private const val TIMEOUT_SECONDS = 5L
 
     data class CommandResult(
         val exitCode: Int,
@@ -19,45 +21,65 @@ object RootShell {
 
     fun isRootAvailable(): Boolean {
         return try {
+            AppLogger.d(TAG, "Checking root availability...")
             val process = Runtime.getRuntime().exec("su")
             val os = DataOutputStream(process.outputStream)
             os.writeBytes("id\n")
             os.writeBytes("exit\n")
             os.flush()
-            val exitCode = process.waitFor()
+            os.close()
+
+            val finished = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            if (!finished) {
+                AppLogger.w(TAG, "Root check timed out after " + TIMEOUT_SECONDS + "s")
+                process.destroyForcibly()
+                return false
+            }
+
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = reader.readText()
             reader.close()
-            os.close()
-            exitCode == 0 && output.contains("uid=0")
+
+            val hasRoot = process.exitValue() == 0 && output.contains("uid=0")
+            AppLogger.i(TAG, "Root check result: " + hasRoot)
+            hasRoot
         } catch (e: Exception) {
-            Log.w(TAG, "Root not available: ${e.message}")
+            AppLogger.w(TAG, "Root not available: " + e.message)
             false
         }
     }
 
     fun execute(command: String): CommandResult {
         return try {
+            AppLogger.d(TAG, "Exec: " + command.take(80))
             val process = Runtime.getRuntime().exec("su")
             val os = DataOutputStream(process.outputStream)
-            os.writeBytes("$command\n")
+            os.writeBytes(command + "\n")
             os.writeBytes("exit\n")
             os.flush()
+            os.close()
+
+            val finished = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            if (!finished) {
+                AppLogger.w(TAG, "Command timed out: " + command.take(50))
+                process.destroyForcibly()
+                return CommandResult(-1, "", "Timeout after " + TIMEOUT_SECONDS + "s")
+            }
 
             val stdout = BufferedReader(InputStreamReader(process.inputStream))
             val stderr = BufferedReader(InputStreamReader(process.errorStream))
 
             val output = stdout.readText()
             val error = stderr.readText()
-            val exitCode = process.waitFor()
+            val exitCode = process.exitValue()
 
             stdout.close()
             stderr.close()
-            os.close()
 
+            AppLogger.d(TAG, "Result: exit=" + exitCode + " out=" + output.length + " chars")
             CommandResult(exitCode, output.trim(), error.trim())
         } catch (e: Exception) {
-            Log.e(TAG, "Root execute failed: ${e.message}")
+            AppLogger.e(TAG, "Execute failed: " + e.message)
             CommandResult(-1, "", e.message ?: "Unknown error")
         }
     }
@@ -67,21 +89,27 @@ object RootShell {
             val process = Runtime.getRuntime().exec("su")
             val os = DataOutputStream(process.outputStream)
             for (cmd in commands) {
-                os.writeBytes("$cmd\n")
+                os.writeBytes(cmd + "\n")
             }
             os.writeBytes("exit\n")
             os.flush()
+            os.close()
+
+            val finished = process.waitFor(TIMEOUT_SECONDS * 2, TimeUnit.SECONDS)
+            if (!finished) {
+                process.destroyForcibly()
+                return CommandResult(-1, "", "Timeout")
+            }
 
             val stdout = BufferedReader(InputStreamReader(process.inputStream))
             val stderr = BufferedReader(InputStreamReader(process.errorStream))
 
             val output = stdout.readText()
             val error = stderr.readText()
-            val exitCode = process.waitFor()
+            val exitCode = process.exitValue()
 
             stdout.close()
             stderr.close()
-            os.close()
 
             CommandResult(exitCode, output.trim(), error.trim())
         } catch (e: Exception) {
@@ -90,7 +118,7 @@ object RootShell {
     }
 
     fun readFileAsRoot(path: String): String? {
-        val result = execute("cat $path")
+        val result = execute("cat " + path)
         return if (result.isSuccess) result.output else null
     }
 
@@ -125,12 +153,12 @@ object RootShell {
     }
 
     fun getProcessNetwork(pid: Int): String? {
-        val result = execute("ls -la /proc/$pid/fd 2>/dev/null | grep socket && cat /proc/$pid/net/tcp 2>/dev/null")
+        val result = execute("ls -la /proc/" + pid + "/fd 2>/dev/null | grep socket && cat /proc/" + pid + "/net/tcp 2>/dev/null")
         return if (result.isSuccess) result.output else null
     }
 
     fun getTcpdumpCapture(iface: String = "any", count: Int = 100): String? {
-        val result = execute("tcpdump -i $iface -c $count -nn -q 2>/dev/null")
+        val result = execute("tcpdump -i " + iface + " -c " + count + " -nn -q 2>/dev/null")
         return if (result.isSuccess) result.output else null
     }
 
@@ -150,7 +178,7 @@ object RootShell {
     }
 
     fun grantPermission(packageName: String, permission: String): Boolean {
-        val result = execute("pm grant $packageName $permission")
+        val result = execute("pm grant " + packageName + " " + permission)
         return result.isSuccess
     }
 }
