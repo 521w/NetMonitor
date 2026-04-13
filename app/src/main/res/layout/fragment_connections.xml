@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -89,6 +88,24 @@
                 android:layout_height="wrap_content"
                 android:text="TIME_WAIT"
                 android:checkable="true" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_ip_exposed"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚠ IP暴露"
+                android:checkable="true"
+                android:textColor="#F44336" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_exposed_listener"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚠ 端口暴露"
+                android:checkable="true"
+                android:textColor="#FF5722" />
 
         </com.google.android.material.chip.ChipGroup>
     </HorizontalScrollView>
