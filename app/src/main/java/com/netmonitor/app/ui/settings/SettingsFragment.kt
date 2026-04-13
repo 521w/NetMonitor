@@ -11,11 +11,11 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import com.netmonitor.app.databinding.FragmentSettingsBinding
 import com.netmonitor.app.model.FilterConfig
 import com.netmonitor.app.util.AppLogger
 import com.netmonitor.app.viewmodel.MonitorViewModel
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,7 +63,7 @@ class SettingsFragment : Fragment() {
                 appFilter = binding.etAppFilter.text.toString().trim()
             )
             viewModel.updateFilter(config)
-            AppLogger.i("Settings", "Filter applied: $config")
+            AppLogger.i("Settings", "Filter applied")
             Toast.makeText(requireContext(), "Filter applied", Toast.LENGTH_SHORT).show()
         }
 
@@ -73,29 +73,47 @@ class SettingsFragment : Fragment() {
             Toast.makeText(requireContext(), "Filter reset", Toast.LENGTH_SHORT).show()
         }
 
-        // Update log stats
         binding.tvLogStats.text = AppLogger.getStats()
 
-        // Run Diagnostics
         binding.btnRunDiagnostics.setOnClickListener {
             AppLogger.i("Settings", "Running diagnostics...")
             binding.btnRunDiagnostics.isEnabled = false
             binding.btnRunDiagnostics.text = "Running..."
 
-            CoroutineScope(Dispatchers.Main).launch {
-                val result = withContext(Dispatchers.IO) {
-                    AppLogger.runDiagnostics(requireContext().applicationContext)
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    val ctx = requireContext().applicationContext
+                    val result = withContext(Dispatchers.IO) {
+                        try {
+                            AppLogger.runDiagnostics(ctx)
+                        } catch (ex: Exception) {
+                            AppLogger.e("Settings", "Diagnostics crash: " + ex.message)
+                            "Diagnostics FAILED:\n" + ex.javaClass.simpleName + ": " + ex.message +
+                                "\n\nPartial logs:\n" + AppLogger.getLogsText()
+                        }
+                    }
+
+                    if (_binding != null) {
+                        binding.btnRunDiagnostics.isEnabled = true
+                        binding.btnRunDiagnostics.text = "Run Diagnostics"
+                        binding.tvLogStats.text = AppLogger.getStats()
+                        showLogDialog("Diagnostics Result", result)
+                    }
+                } catch (ex: Exception) {
+                    AppLogger.e("Settings", "UI update failed: " + ex.message)
+                    if (_binding != null) {
+                        binding.btnRunDiagnostics.isEnabled = true
+                        binding.btnRunDiagnostics.text = "Run Diagnostics"
+                        Toast.makeText(
+                            requireContext(),
+                            "Error: " + ex.message,
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
-
-                binding.btnRunDiagnostics.isEnabled = true
-                binding.btnRunDiagnostics.text = "Run Diagnostics"
-                binding.tvLogStats.text = AppLogger.getStats()
-
-                showLogDialog("Diagnostics Result", result)
             }
         }
 
-        // View All Logs
         binding.btnViewLogs.setOnClickListener {
             val text = AppLogger.getLogsText()
             if (text.isBlank()) {
@@ -106,7 +124,6 @@ class SettingsFragment : Fragment() {
             binding.tvLogStats.text = AppLogger.getStats()
         }
 
-        // View Errors Only
         binding.btnViewErrors.setOnClickListener {
             val text = AppLogger.getErrorsAndCrashes()
             if (text.isBlank()) {
@@ -116,23 +133,34 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        // Share Logs
         binding.btnShareLogs.setOnClickListener {
-            val diag = AppLogger.runDiagnostics(requireContext().applicationContext)
-            val allLogs = AppLogger.getLogsText()
-            val fullText = diag + "\n\n===== Full Logs =====\n" + allLogs
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    val ctx = requireContext().applicationContext
+                    val diag = withContext(Dispatchers.IO) {
+                        try {
+                            AppLogger.runDiagnostics(ctx)
+                        } catch (ex: Exception) {
+                            "Diagnostics failed: " + ex.message
+                        }
+                    }
+                    val allLogs = AppLogger.getLogsText()
+                    val fullText = diag + "\n\n===== Full Logs =====\n" + allLogs
 
-            val sendIntent = Intent().apply {
-                action = Intent.ACTION_SEND
-                putExtra(Intent.EXTRA_TEXT, fullText)
-                putExtra(Intent.EXTRA_SUBJECT, "NetMonitor Logs")
-                type = "text/plain"
+                    val sendIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, fullText)
+                        putExtra(Intent.EXTRA_SUBJECT, "NetMonitor Logs")
+                        type = "text/plain"
+                    }
+                    startActivity(Intent.createChooser(sendIntent, "Share Logs"))
+                    AppLogger.i("Settings", "Logs shared")
+                } catch (ex: Exception) {
+                    AppLogger.e("Settings", "Share failed: " + ex.message)
+                }
             }
-            startActivity(Intent.createChooser(sendIntent, "Share Logs"))
-            AppLogger.i("Settings", "Logs shared")
         }
 
-        // Clear Logs
         binding.btnClearLogs.setOnClickListener {
             AppLogger.clear()
             binding.tvLogStats.text = AppLogger.getStats()
