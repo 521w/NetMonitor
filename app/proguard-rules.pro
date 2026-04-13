@@ -1,0 +1,3 @@
+-keep class com.netmonitor.app.model.** { *; }
+-keep class com.netmonitor.app.service.** { *; }
+-dontwarn kotlinx.coroutines.**
