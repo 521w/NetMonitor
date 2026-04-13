@@ -1,7 +1,9 @@
 package com.netmonitor.app.model
 
+import java.util.concurrent.atomic.AtomicLong
+
 data class PacketInfo(
-    val id: Long = System.nanoTime(),
+    val id: Long = ID_GENERATOR.incrementAndGet(),
     val timestamp: Long = System.currentTimeMillis(),
     val protocol: String,
     val sourceIp: String,
@@ -19,7 +21,7 @@ data class PacketInfo(
 
     val summary: String
         get() = "$directionIcon $protocol " +
-                "$sourceIp:$sourcePort → $destIp:$destPort [$length B]"
+            "$sourceIp:$sourcePort → $destIp:$destPort [$length B]"
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -28,4 +30,8 @@ data class PacketInfo(
     }
 
     override fun hashCode(): Int = id.hashCode()
+
+    companion object {
+        private val ID_GENERATOR = AtomicLong(0)
+    }
 }
