@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="16dp">
@@ -11,141 +10,226 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- 协议过滤 -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            app:cardElevation="2dp">
-            <LinearLayout android:layout_width="match_parent"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" android:padding="16dp">
-                <TextView android:layout_width="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="协议过滤" android:textSize="16sp"
+                    android:text="Protocol Filter"
+                    android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
+
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switch_tcp"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="显示 TCP 连接" android:checked="true" />
+                    android:text="TCP"
+                    android:checked="true" />
+
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switch_udp"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="显示 UDP 连接" android:checked="true" />
+                    android:text="UDP"
+                    android:checked="true" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 状态过滤 -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            app:cardElevation="2dp">
-            <LinearLayout android:layout_width="match_parent"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" android:padding="16dp">
-                <TextView android:layout_width="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="状态过滤" android:textSize="16sp"
+                    android:text="State Filter"
+                    android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
+
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switch_established"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="ESTABLISHED (已建立)"
+                    android:text="Established"
                     android:checked="true" />
+
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switch_listening"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="LISTEN (监听中)"
+                    android:text="Listening"
                     android:checked="true" />
+
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switch_other"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="其他状态" android:checked="true" />
+                    android:text="Other"
+                    android:checked="true" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 精确过滤 -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            app:cardElevation="2dp">
-            <LinearLayout android:layout_width="match_parent"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" android:padding="16dp">
-                <TextView android:layout_width="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="精确过滤" android:textSize="16sp"
+                    android:text="Precise Filter"
+                    android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
-                <com.google.android.material.textfield.TextInputLayout
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/et_ip_filter"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="IP 地址过滤"
-                    android:layout_marginBottom="8dp"
-                    style=
-                    "@style/Widget.Material3.TextInputLayout.OutlinedBox">
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/et_ip_filter"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="text" />
-                </com.google.android.material.textfield.TextInputLayout>
-                <com.google.android.material.textfield.TextInputLayout
+                    android:hint="IP Address"
+                    android:inputType="text"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/et_port_filter"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="端口号过滤"
-                    android:layout_marginBottom="8dp"
-                    style=
-                    "@style/Widget.Material3.TextInputLayout.OutlinedBox">
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/et_port_filter"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="number" />
-                </com.google.android.material.textfield.TextInputLayout>
-                <com.google.android.material.textfield.TextInputLayout
+                    android:hint="Port"
+                    android:inputType="number"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/et_app_filter"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="应用名过滤"
-                    style=
-                    "@style/Widget.Material3.TextInputLayout.OutlinedBox">
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/et_app_filter"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="text" />
-                </com.google.android.material.textfield.TextInputLayout>
+                    android:hint="App Name"
+                    android:inputType="text" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 操作按钮 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="end">
+            android:layout_marginBottom="16dp">
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_reset_filter"
                 style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="重置"
-                android:layout_marginEnd="8dp" />
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="Reset" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_apply_filter"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="应用过滤" />
+                android:layout_weight="1"
+                android:text="Apply" />
         </LinearLayout>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Diagnostics and Logs"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tv_log_stats"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Logs: 0"
+                    android:textSize="12sp"
+                    android:textColor="?android:textColorSecondary"
+                    android:layout_marginBottom="12dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_run_diagnostics"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Run Diagnostics"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_view_logs"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="View All Logs"
+                    android:layout_marginBottom="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_view_errors"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="View Errors Only"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_share_logs"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:text="Share" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_clear_logs"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Clear Logs" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
