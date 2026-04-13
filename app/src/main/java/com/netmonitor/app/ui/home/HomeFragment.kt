@@ -7,6 +7,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.navigation.fragment.findNavController
+import com.netmonitor.app.R
 import com.netmonitor.app.databinding.FragmentHomeBinding
 import com.netmonitor.app.service.NetworkMonitorService
 import com.netmonitor.app.viewmodel.MonitorViewModel
@@ -39,6 +41,11 @@ class HomeFragment : Fragment() {
             toggleService()
         }
 
+        // 点击暴露检测卡片，跳转到暴露记录页面
+        binding.btnViewExposureLog.setOnClickListener {
+            findNavController().navigate(R.id.navigation_exposure_log)
+        }
+
         viewModel.isMonitoring.observe(viewLifecycleOwner) { monitoring ->
             binding.fabToggleMonitor.text =
                 if (monitoring) "\u505c\u6b62\u76d1\u63a7" else "\u542f\u52a8\u76d1\u63a7"
@@ -51,9 +58,9 @@ class HomeFragment : Fragment() {
                 else "\u25cb \u76d1\u63a7\u5df2\u505c\u6b62"
             binding.tvStatus.setTextColor(
                 if (monitoring) requireContext().getColor(
-                    com.netmonitor.app.R.color.state_active
+                    R.color.state_active
                 ) else requireContext().getColor(
-                    com.netmonitor.app.R.color.state_other
+                    R.color.state_other
                 )
             )
         }
