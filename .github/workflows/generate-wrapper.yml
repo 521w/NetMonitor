@@ -22,8 +22,14 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Generate Wrapper
-        run: gradle wrapper --gradle-version 8.7
+      - name: Generate Wrapper in temp dir
+        run: |
+          mkdir /tmp/wrapper-gen
+          cd /tmp/wrapper-gen
+          echo "" > settings.gradle.kts
+          gradle wrapper --gradle-version 8.7
+          cp gradlew gradlew.bat $GITHUB_WORKSPACE/
+          cp gradle/wrapper/gradle-wrapper.jar $GITHUB_WORKSPACE/gradle/wrapper/
 
       - name: Commit wrapper files
         run: |
