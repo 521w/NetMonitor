@@ -2,11 +2,23 @@ package com.netmonitor.app.util
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Log
 import com.netmonitor.app.model.ConnectionInfo
 import java.io.File
 import java.net.InetAddress
 
 object NetworkParser {
+
+    private const val TAG = "NetworkParser"
+    private var useRoot: Boolean? = null
+
+    private fun shouldUseRoot(): Boolean {
+        if (useRoot == null) {
+            useRoot = RootShell.isRootAvailable()
+            Log.i(TAG, "Root available: $useRoot")
+        }
+        return useRoot == true
+    }
 
     fun parseTcpConnections(context: Context): List<ConnectionInfo> {
         val connections = mutableListOf<ConnectionInfo>()
@@ -29,6 +41,29 @@ object NetworkParser {
         return connections.sortedByDescending { it.timestamp }
     }
 
+    private fun readFileContent(path: String): List<String>? {
+        return try {
+            val file = File(path)
+            if (file.exists() && file.canRead()) {
+                file.readLines()
+            } else if (shouldUseRoot()) {
+                Log.i(TAG, "Normal read failed for $path, trying root...")
+                val content = RootShell.readFileAsRoot(path)
+                content?.lines()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            if (shouldUseRoot()) {
+                Log.i(TAG, "Exception reading $path, fallback to root")
+                val content = RootShell.readFileAsRoot(path)
+                content?.lines()
+            } else {
+                null
+            }
+        }
+    }
+
     private fun parseFile(
         context: Context,
         path: String,
@@ -36,10 +71,8 @@ object NetworkParser {
     ): List<ConnectionInfo> {
         val connections = mutableListOf<ConnectionInfo>()
         try {
-            val file = File(path)
-            if (!file.exists() || !file.canRead()) return connections
+            val lines = readFileContent(path) ?: return connections
 
-            val lines = file.readLines()
             for (i in 1 until lines.size) {
                 val line = lines[i].trim()
                 if (line.isBlank()) continue
@@ -116,11 +149,94 @@ object NetworkParser {
             if (!packages.isNullOrEmpty()) {
                 val appInfo = pm.getApplicationInfo(packages[0], 0)
                 pm.getApplicationLabel(appInfo).toString()
+            } else if (shouldUseRoot()) {
+                getRootAppName(uid)
             } else {
                 "UID:$uid"
             }
         } catch (_: PackageManager.NameNotFoundException) {
+            if (shouldUseRoot()) getRootAppName(uid) else "UID:$uid"
+        }
+    }
+
+    private fun getRootAppName(uid: Int): String {
+        return try {
+            val result = RootShell.execute(
+                "dumpsys package | grep -A1 'userId=$uid' | head -2"
+            )
+            if (result.isSuccess && result.output.isNotBlank()) {
+                val match = Regex("Package\\s+\\[(\\S+)]").find(result.output)
+                match?.groupValues?.get(1) ?: "UID:$uid"
+            } else {
+                "UID:$uid"
+            }
+        } catch (_: Exception) {
             "UID:$uid"
         }
+    }
+
+    fun getArpTable(): List<Map<String, String>> {
+        val entries = mutableListOf<Map<String, String>>()
+        val content = if (shouldUseRoot()) {
+            RootShell.readFileAsRoot("/proc/net/arp")
+        } else {
+            try { File("/proc/net/arp").readText() } catch (_: Exception) { null }
+        } ?: return entries
+
+        val lines = content.lines()
+        for (i in 1 until lines.size) {
+            val line = lines[i].trim()
+            if (line.isBlank()) continue
+            val parts = line.split("\\s+".toRegex())
+            if (parts.size >= 6) {
+                entries.add(
+                    mapOf(
+                        "ip" to parts[0],
+                        "hwType" to parts[1],
+                        "flags" to parts[2],
+                        "mac" to parts[3],
+                        "mask" to parts[4],
+                        "device" to parts[5]
+                    )
+                )
+            }
+        }
+        return entries
+    }
+
+    fun getNetworkInterfaces(): String? {
+        return if (shouldUseRoot()) {
+            RootShell.getActiveInterfaces()
+        } else null
+    }
+
+    fun getRoutingTable(): String? {
+        return if (shouldUseRoot()) {
+            RootShell.getRoutingTable()
+        } else null
+    }
+
+    fun getIptablesRules(): String? {
+        return if (shouldUseRoot()) {
+            RootShell.getIptablesRules()
+        } else null
+    }
+
+    fun getDnsConfig(): String? {
+        return if (shouldUseRoot()) {
+            RootShell.getDnsInfo()
+        } else null
+    }
+
+    fun getNetworkTrafficStats(): String? {
+        return if (shouldUseRoot()) {
+            RootShell.getNetworkStats()
+        } else null
+    }
+
+    fun getOpenPorts(): String? {
+        return if (shouldUseRoot()) {
+            RootShell.getOpenPorts()
+        } else null
     }
 }
