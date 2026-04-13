@@ -170,19 +170,26 @@ object NetworkParser {
 
     private fun getRootAppName(uid: Int): String {
         return try {
-            val result = RootShell.execute(
-                "dumpsys package | grep -A1 'userId=$uid' | head -2"
-            )
+            val cmd = "dumpsys package | grep -A1 'userId=" + uid + "' | head -2"
+            val result = RootShell.execute(cmd)
             if (result.isSuccess && result.output.isNotBlank()) {
-                val match = Regex("Package\\s+\
-
-\[(\\S+)]").find(result.output)
-                match?.groupValues?.get(1) ?: "UID:$uid"
+                val lines = result.output.lines()
+                for (line in lines) {
+                    val idx = line.indexOf("Package [")
+                    if (idx >= 0) {
+                        val start = idx + 9
+                        val end = line.indexOf("]", start)
+                        if (end > start) {
+                            return line.substring(start, end)
+                        }
+                    }
+                }
+                "UID:" + uid
             } else {
-                "UID:$uid"
+                "UID:" + uid
             }
         } catch (_: Exception) {
-            "UID:$uid"
+            "UID:" + uid
         }
     }
 
