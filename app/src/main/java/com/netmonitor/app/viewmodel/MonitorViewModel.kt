@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.netmonitor.app.model.ConnectionInfo
 import com.netmonitor.app.model.FilterConfig
 import com.netmonitor.app.model.PacketInfo
+import com.netmonitor.app.util.ExposureLogManager
 import com.netmonitor.app.util.NetworkParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -50,6 +51,9 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         if (_isMonitoring.value == true) return
         _isMonitoring.value = true
 
+        // 重置暴露记录去重，新会话重新检测
+        ExposureLogManager.resetSession()
+
         monitorJob = viewModelScope.launch {
             while (isActive) {
                 refreshConnections()
@@ -65,8 +69,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun toggleMonitoring() {
-        if (_isMonitoring.value == true) stopMonitoring()
-        else startMonitoring()
+        if (_isMonitoring.value == true) stopMonitoring() else startMonitoring()
     }
 
     fun setCapturing(capturing: Boolean) {
@@ -103,9 +106,14 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun refreshConnections() {
+        val ctx = getApplication<Application>()
         val allConns = withContext(Dispatchers.IO) {
-            val ctx = getApplication<Application>()
             NetworkParser.parseAllConnections(ctx)
+        }
+
+        // 在IO线程中扫描并记录暴露
+        withContext(Dispatchers.IO) {
+            ExposureLogManager.scanAndLog(ctx, allConns)
         }
 
         withContext(Dispatchers.Main) {
