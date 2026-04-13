@@ -64,13 +64,13 @@ class SettingsFragment : Fragment() {
             )
             viewModel.updateFilter(config)
             AppLogger.i("Settings", "Filter applied")
-            Toast.makeText(requireContext(), "Filter applied", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "筛选已应用", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnResetFilter.setOnClickListener {
             viewModel.updateFilter(FilterConfig())
             AppLogger.i("Settings", "Filter reset")
-            Toast.makeText(requireContext(), "Filter reset", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "筛选已重置", Toast.LENGTH_SHORT).show()
         }
 
         binding.tvLogStats.text = AppLogger.getStats()
@@ -78,7 +78,7 @@ class SettingsFragment : Fragment() {
         binding.btnRunDiagnostics.setOnClickListener {
             AppLogger.i("Settings", "Running diagnostics...")
             binding.btnRunDiagnostics.isEnabled = false
-            binding.btnRunDiagnostics.text = "Running..."
+            binding.btnRunDiagnostics.text = "诊断中..."
 
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
@@ -88,25 +88,25 @@ class SettingsFragment : Fragment() {
                             AppLogger.runDiagnostics(ctx)
                         } catch (ex: Exception) {
                             AppLogger.e("Settings", "Diagnostics crash: " + ex.message)
-                            "Diagnostics FAILED:\n" + ex.javaClass.simpleName + ": " + ex.message +
-                                "\n\nPartial logs:\n" + AppLogger.getLogsText()
+                            "诊断失败:\n" + ex.javaClass.simpleName + ": " + ex.message +
+                                "\n\n部分日志:\n" + AppLogger.getLogsText()
                         }
                     }
 
                     if (_binding != null) {
                         binding.btnRunDiagnostics.isEnabled = true
-                        binding.btnRunDiagnostics.text = "Run Diagnostics"
+                        binding.btnRunDiagnostics.text = "运行诊断"
                         binding.tvLogStats.text = AppLogger.getStats()
-                        showLogDialog("Diagnostics Result", result)
+                        showLogDialog("诊断结果", result)
                     }
                 } catch (ex: Exception) {
                     AppLogger.e("Settings", "UI update failed: " + ex.message)
                     if (_binding != null) {
                         binding.btnRunDiagnostics.isEnabled = true
-                        binding.btnRunDiagnostics.text = "Run Diagnostics"
+                        binding.btnRunDiagnostics.text = "运行诊断"
                         Toast.makeText(
                             requireContext(),
-                            "Error: " + ex.message,
+                            "错误: " + ex.message,
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -117,9 +117,9 @@ class SettingsFragment : Fragment() {
         binding.btnViewLogs.setOnClickListener {
             val text = AppLogger.getLogsText()
             if (text.isBlank()) {
-                Toast.makeText(requireContext(), "No logs yet", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "暂无日志", Toast.LENGTH_SHORT).show()
             } else {
-                showLogDialog("All Logs (" + AppLogger.getAllLogs().size + ")", text)
+                showLogDialog("全部日志 (" + AppLogger.getAllLogs().size + ")", text)
             }
             binding.tvLogStats.text = AppLogger.getStats()
         }
@@ -127,9 +127,9 @@ class SettingsFragment : Fragment() {
         binding.btnViewErrors.setOnClickListener {
             val text = AppLogger.getErrorsAndCrashes()
             if (text.isBlank()) {
-                Toast.makeText(requireContext(), "No errors found!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), "没有发现错误！", Toast.LENGTH_SHORT).show()
             } else {
-                showLogDialog("Errors and Crashes", text)
+                showLogDialog("错误与崩溃", text)
             }
         }
 
@@ -141,19 +141,19 @@ class SettingsFragment : Fragment() {
                         try {
                             AppLogger.runDiagnostics(ctx)
                         } catch (ex: Exception) {
-                            "Diagnostics failed: " + ex.message
+                            "诊断失败: " + ex.message
                         }
                     }
                     val allLogs = AppLogger.getLogsText()
-                    val fullText = diag + "\n\n===== Full Logs =====\n" + allLogs
+                    val fullText = diag + "\n\n===== 完整日志 =====\n" + allLogs
 
                     val sendIntent = Intent().apply {
                         action = Intent.ACTION_SEND
                         putExtra(Intent.EXTRA_TEXT, fullText)
-                        putExtra(Intent.EXTRA_SUBJECT, "NetMonitor Logs")
+                        putExtra(Intent.EXTRA_SUBJECT, "NetMonitor 日志")
                         type = "text/plain"
                     }
-                    startActivity(Intent.createChooser(sendIntent, "Share Logs"))
+                    startActivity(Intent.createChooser(sendIntent, "分享日志"))
                     AppLogger.i("Settings", "Logs shared")
                 } catch (ex: Exception) {
                     AppLogger.e("Settings", "Share failed: " + ex.message)
@@ -164,7 +164,7 @@ class SettingsFragment : Fragment() {
         binding.btnClearLogs.setOnClickListener {
             AppLogger.clear()
             binding.tvLogStats.text = AppLogger.getStats()
-            Toast.makeText(requireContext(), "Logs cleared", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "日志已清除", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -184,14 +184,14 @@ class SettingsFragment : Fragment() {
         AlertDialog.Builder(ctx)
             .setTitle(title)
             .setView(scrollView)
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Copy") { _, _ ->
+            .setPositiveButton("确定", null)
+            .setNeutralButton("复制") { _, _ ->
                 val clipboard = ctx.getSystemService(
                     android.content.Context.CLIPBOARD_SERVICE
                 ) as android.content.ClipboardManager
                 val clip = android.content.ClipData.newPlainText("logs", content)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(ctx, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
             }
             .show()
     }
