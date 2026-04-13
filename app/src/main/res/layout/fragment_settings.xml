@@ -26,7 +26,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Protocol Filter"
+                    android:text="协议筛选"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
@@ -61,7 +61,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="State Filter"
+                    android:text="状态筛选"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
@@ -70,21 +70,21 @@
                     android:id="@+id/switch_established"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Established"
+                    android:text="已连接"
                     android:checked="true" />
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switch_listening"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Listening"
+                    android:text="监听中"
                     android:checked="true" />
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switch_other"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Other"
+                    android:text="其他状态"
                     android:checked="true" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -103,7 +103,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Precise Filter"
+                    android:text="精确筛选"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
@@ -112,7 +112,7 @@
                     android:id="@+id/et_ip_filter"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="IP Address"
+                    android:hint="IP 地址"
                     android:inputType="text"
                     android:layout_marginBottom="8dp" />
 
@@ -120,7 +120,7 @@
                     android:id="@+id/et_port_filter"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Port"
+                    android:hint="端口"
                     android:inputType="number"
                     android:layout_marginBottom="8dp" />
 
@@ -128,7 +128,7 @@
                     android:id="@+id/et_app_filter"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="App Name"
+                    android:hint="应用名称"
                     android:inputType="text" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -146,14 +146,14 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
-                android:text="Reset" />
+                android:text="重置" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_apply_filter"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Apply" />
+                android:text="应用" />
         </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
@@ -170,7 +170,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Diagnostics and Logs"
+                    android:text="诊断与日志"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="4dp" />
@@ -179,7 +179,7 @@
                     android:id="@+id/tv_log_stats"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Logs: 0"
+                    android:text="日志: 0"
                     android:textSize="12sp"
                     android:textColor="?android:textColorSecondary"
                     android:layout_marginBottom="12dp" />
@@ -189,7 +189,7 @@
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Run Diagnostics"
+                    android:text="运行诊断"
                     android:layout_marginBottom="8dp" />
 
                 <com.google.android.material.button.MaterialButton
@@ -197,7 +197,7 @@
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="View All Logs"
+                    android:text="查看全部日志"
                     android:layout_marginBottom="8dp" />
 
                 <com.google.android.material.button.MaterialButton
@@ -205,7 +205,7 @@
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="View Errors Only"
+                    android:text="仅查看错误"
                     android:layout_marginBottom="8dp" />
 
                 <LinearLayout
@@ -220,7 +220,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:layout_marginEnd="8dp"
-                        android:text="Share" />
+                        android:text="分享日志" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_clear_logs"
@@ -228,7 +228,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Clear Logs" />
+                        android:text="清除日志" />
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
