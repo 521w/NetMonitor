@@ -22,6 +22,7 @@ class PacketsFragment : Fragment() {
 
     private var _binding: FragmentPacketsBinding? = null
     private val binding get() = _binding!!
+
     private val viewModel: MonitorViewModel by activityViewModels()
     private lateinit var adapter: PacketAdapter
 
@@ -51,13 +52,15 @@ class PacketsFragment : Fragment() {
     }
 
     override fun onViewCreated(
-        view: View, savedInstanceState: Bundle?
+        view: View,
+        savedInstanceState: Bundle?
     ) {
         super.onViewCreated(view, savedInstanceState)
 
         adapter = PacketAdapter { packet ->
             showPacketDetail(packet)
         }
+
         binding.recyclerPackets.layoutManager =
             LinearLayoutManager(requireContext())
         binding.recyclerPackets.adapter = adapter
@@ -85,7 +88,8 @@ class PacketsFragment : Fragment() {
             adapter.submitList(packets.take(500))
             binding.tvEmpty.visibility =
                 if (packets.isEmpty()) View.VISIBLE else View.GONE
-            binding.tvPacketCount.text = "已捕获 ${packets.size} 个数据包"
+            binding.tvPacketCount.text =
+                "已捕获 ${packets.size} 个数据包"
         }
     }
 
@@ -99,10 +103,9 @@ class PacketsFragment : Fragment() {
     }
 
     private fun startVpnCapture() {
-        // ★ 关键修复：启动前设置静态回调
-        PacketCaptureVpnService.onPacketCaptured = { packet ->
-            viewModel.addPacket(packet)
-        }
+        // ✅ 已改用 PacketBus：ViewModel.setCapturing(true) 内部会自动
+        //    启动 PacketBus.packets.collect() 协程来接收数据包，
+        //    无需在此设置静态回调
 
         val intent = Intent(
             requireContext(),
@@ -124,8 +127,8 @@ class PacketsFragment : Fragment() {
         requireContext().startService(intent)
         viewModel.setCapturing(false)
 
-        // ★ 关键修复：停止时清除回调
-        PacketCaptureVpnService.onPacketCaptured = null
+        // ✅ 已改用 PacketBus：ViewModel.setCapturing(false) 内部会自动
+        //    取消收集协程，无需在此清除静态回调
     }
 
     private fun showPacketDetail(packet: PacketInfo) {
