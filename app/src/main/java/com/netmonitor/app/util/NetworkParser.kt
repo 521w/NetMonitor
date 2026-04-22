@@ -2,6 +2,8 @@ package com.netmonitor.app.util
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import com.netmonitor.app.model.ConnectionInfo
 import java.io.File
 import java.net.InetAddress
@@ -13,6 +15,9 @@ object NetworkParser {
     private val uidNameCache = HashMap<Int, String>()
     private var cacheBuilt = false
 
+    // ── 增量更新缓存 ──
+    private var lastConnectionMap = HashMap<String, ConnectionInfo>()
+
     private fun isRootAvailable(): Boolean {
         if (rootAvailable == null) {
             rootAvailable = RootShell.isRootAvailable()
@@ -20,12 +25,13 @@ object NetworkParser {
         return rootAvailable == true
     }
 
+    // ── UID 缓存 ──
+
     private fun buildUidCache(context: Context) {
         if (cacheBuilt) return
         AppLogger.i(TAG, "Building UID cache...")
         val startTime = System.currentTimeMillis()
 
-        // Step 1: PackageManager (works without root, gets most apps)
         try {
             val pm = context.packageManager
             @Suppress("DEPRECATION")
@@ -35,12 +41,11 @@ object NetworkParser {
                 val label = pm.getApplicationLabel(pkg.applicationInfo!!).toString()
                 uidNameCache[uid] = label
             }
-            AppLogger.i(TAG, "PM cache: " + uidNameCache.size + " apps")
+            AppLogger.i(TAG, "PM cache: ${uidNameCache.size} apps")
         } catch (e: Exception) {
-            AppLogger.w(TAG, "PM cache failed: " + e.message)
+            AppLogger.w(TAG, "PM cache failed: ${e.message}")
         }
 
-        // Step 2: Root packages.list (gets system UIDs too)
         if (isRootAvailable()) {
             try {
                 val content = RootShell.readFileAsRoot("/data/system/packages.list")
@@ -57,14 +62,13 @@ object NetworkParser {
                             }
                         }
                     }
-                    AppLogger.i(TAG, "Root cache added: " + added + " more")
+                    AppLogger.i(TAG, "Root cache added: $added more")
                 }
             } catch (e: Exception) {
-                AppLogger.w(TAG, "Root cache failed: " + e.message)
+                AppLogger.w(TAG, "Root cache failed: ${e.message}")
             }
         }
 
-        // Well-known system UIDs
         uidNameCache.putIfAbsent(0, "root (kernel)")
         uidNameCache.putIfAbsent(1000, "system")
         uidNameCache.putIfAbsent(1001, "radio")
@@ -75,8 +79,34 @@ object NetworkParser {
 
         cacheBuilt = true
         val elapsed = System.currentTimeMillis() - startTime
-        AppLogger.i(TAG, "UID cache ready: " + uidNameCache.size + " entries in " + elapsed + "ms")
+        AppLogger.i(TAG, "UID cache ready: ${uidNameCache.size} entries in ${elapsed}ms")
     }
+
+    // ── 文件读取（Root 优先） ──
+
+    private fun readFileContent(path: String): List<String>? {
+        if (isRootAvailable()) {
+            try {
+                val content = RootShell.readFileAsRoot(path)
+                if (!content.isNullOrBlank()) {
+                    return content.lines()
+                }
+            } catch (_: Exception) {}
+        }
+
+        return try {
+            val file = File(path)
+            if (file.exists() && file.canRead()) {
+                file.readLines()
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    // ── 连接解析 ──
 
     fun parseTcpConnections(context: Context): List<ConnectionInfo> {
         val connections = mutableListOf<ConnectionInfo>()
@@ -100,35 +130,73 @@ object NetworkParser {
         connections.addAll(parseTcpConnections(context))
         connections.addAll(parseUdpConnections(context))
 
+        // 非 Root 且 /proc/net 不可读时的降级提示
+        if (connections.isEmpty() && !isRootAvailable()) {
+            AppLogger.w(TAG, "No connections from /proc/net, falling back to ConnectivityManager")
+            val fallbackInfo = getConnectivityFallback(context)
+            if (fallbackInfo != null) {
+                AppLogger.i(TAG, "Fallback: device has active network ($fallbackInfo)")
+            }
+        }
+
         val sorted = connections.sortedByDescending { it.timestamp }
         val elapsed = System.currentTimeMillis() - startTime
-        AppLogger.i(TAG, "Parsed " + sorted.size + " connections in " + elapsed + "ms")
+        AppLogger.i(TAG, "Parsed ${sorted.size} connections in ${elapsed}ms")
         return sorted
     }
 
-    private fun readFileContent(path: String): List<String>? {
-        // Root first: sees ALL connections from ALL processes
-        if (isRootAvailable()) {
-            try {
-                val content = RootShell.readFileAsRoot(path)
-                if (!content.isNullOrBlank()) {
-                    return content.lines()
-                }
-            } catch (_: Exception) {}
+    /**
+     * 增量差异解析：只返回相比上次有变化的部分
+     *
+     * 你的设备有 587 条连接，其中大部分（尤其 LISTEN/IDLE）
+     * 在两次刷新间不会变化。差异比对可大幅减少 UI 更新量。
+     */
+    fun parseDifferential(context: Context): DiffResult {
+        val current = parseAllConnections(context)
+        val currentMap = HashMap<String, ConnectionInfo>(current.size)
+        for (conn in current) {
+            currentMap[conn.connectionKey] = conn
         }
 
-        // Fallback: normal read (only own process connections on Android 10+)
-        return try {
-            val file = File(path)
-            if (file.exists() && file.canRead()) {
-                file.readLines()
-            } else {
-                null
+        val added = mutableListOf<ConnectionInfo>()
+        val removed = mutableListOf<ConnectionInfo>()
+        val changed = mutableListOf<ConnectionInfo>()
+
+        for ((key, conn) in currentMap) {
+            val old = lastConnectionMap[key]
+            if (old == null) {
+                added.add(conn)
+            } else if (old.state != conn.state) {
+                changed.add(conn)
             }
-        } catch (_: Exception) {
-            null
         }
+
+        for ((key, conn) in lastConnectionMap) {
+            if (!currentMap.containsKey(key)) {
+                removed.add(conn)
+            }
+        }
+
+        lastConnectionMap = currentMap
+
+        return DiffResult(
+            all = current,
+            added = added,
+            removed = removed,
+            changed = changed,
+            hasChanges = added.isNotEmpty() || removed.isNotEmpty() || changed.isNotEmpty()
+        )
     }
+
+    data class DiffResult(
+        val all: List<ConnectionInfo>,
+        val added: List<ConnectionInfo>,
+        val removed: List<ConnectionInfo>,
+        val changed: List<ConnectionInfo>,
+        val hasChanges: Boolean
+    )
+
+    // ── 单文件解析 ──
 
     private fun parseFile(
         context: Context,
@@ -142,7 +210,6 @@ object NetworkParser {
             for (i in 1 until lines.size) {
                 val line = lines[i].trim()
                 if (line.isBlank()) continue
-
                 try {
                     val parts = line.split("\\s+".toRegex())
                     if (parts.size < 10) continue
@@ -161,16 +228,16 @@ object NetworkParser {
                             remotePort = remoteAddr.second,
                             state = state,
                             uid = uid,
-                            appName = uidNameCache[uid] ?: ("UID:" + uid)
+                            appName = uidNameCache[uid] ?: ("UID:$uid")
                         )
                     )
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) { }
             }
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) { }
         return connections
     }
+
+    // ── 地址解析 ──
 
     private fun parseAddress(raw: String): Pair<String, Int> {
         val parts = raw.split(":")
@@ -181,10 +248,10 @@ object NetworkParser {
 
         val ip = if (hexIp.length == 8) {
             val ipLong = hexIp.toLong(16)
-            "" + (ipLong and 0xFF).toInt() +
-                "." + ((ipLong shr 8) and 0xFF).toInt() +
-                "." + ((ipLong shr 16) and 0xFF).toInt() +
-                "." + ((ipLong shr 24) and 0xFF).toInt()
+            "${(ipLong and 0xFF).toInt()}" +
+                    ".${((ipLong shr 8) and 0xFF).toInt()}" +
+                    ".${((ipLong shr 16) and 0xFF).toInt()}" +
+                    ".${((ipLong shr 24) and 0xFF).toInt()}"
         } else if (hexIp.length == 32) {
             try {
                 val bytes = ByteArray(16)
@@ -206,6 +273,34 @@ object NetworkParser {
 
         return Pair(ip, port)
     }
+
+    // ── 降级方案 ──
+
+    private fun getConnectivityFallback(context: Context): String? {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = cm.activeNetwork ?: return null
+            val caps = cm.getNetworkCapabilities(network) ?: return null
+
+            val type = when {
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WiFi"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cellular"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
+                else -> "Unknown"
+            }
+
+            val hasInternet = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            val isValidated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+
+            "$type (internet=$hasInternet, validated=$isValidated)"
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "Fallback failed: ${e.message}")
+            null
+        }
+    }
+
+    // ── 辅助信息查询 ──
 
     fun getArpTable(): List<Map<String, String>> {
         val entries = mutableListOf<Map<String, String>>()
@@ -236,39 +331,21 @@ object NetworkParser {
         return entries
     }
 
-    fun getNetworkInterfaces(): String? {
-        return if (isRootAvailable()) {
-            RootShell.getActiveInterfaces()
-        } else null
-    }
+    fun getNetworkInterfaces(): String? =
+        if (isRootAvailable()) RootShell.getActiveInterfaces() else null
 
-    fun getRoutingTable(): String? {
-        return if (isRootAvailable()) {
-            RootShell.getRoutingTable()
-        } else null
-    }
+    fun getRoutingTable(): String? =
+        if (isRootAvailable()) RootShell.getRoutingTable() else null
 
-    fun getIptablesRules(): String? {
-        return if (isRootAvailable()) {
-            RootShell.getIptablesRules()
-        } else null
-    }
+    fun getIptablesRules(): String? =
+        if (isRootAvailable()) RootShell.getIptablesRules() else null
 
-    fun getDnsConfig(): String? {
-        return if (isRootAvailable()) {
-            RootShell.getDnsInfo()
-        } else null
-    }
+    fun getDnsConfig(): String? =
+        if (isRootAvailable()) RootShell.getDnsInfo() else null
 
-    fun getNetworkTrafficStats(): String? {
-        return if (isRootAvailable()) {
-            RootShell.getNetworkStats()
-        } else null
-    }
+    fun getNetworkTrafficStats(): String? =
+        if (isRootAvailable()) RootShell.getNetworkStats() else null
 
-    fun getOpenPorts(): String? {
-        return if (isRootAvailable()) {
-            RootShell.getOpenPorts()
-        } else null
-    }
+    fun getOpenPorts(): String? =
+        if (isRootAvailable()) RootShell.getOpenPorts() else null
 }
