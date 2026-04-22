@@ -1,37 +1,47 @@
 package com.netmonitor.app.util
 
 import android.content.Context
+import com.netmonitor.app.Constants
 import com.netmonitor.app.model.ConnectionInfo
 import com.netmonitor.app.model.ExposureRecord
+import kotlinx.coroutines.*
 import org.json.JSONArray
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * 暴露记录管理器
- * - JSON 文件持久化存储到 App 内部存储
- * - 会话级去重，同一连接不会重复记录
- * - 最多保留 MAX_RECORDS 条记录
+ *
+ * 改进点:
+ * - seenKeys 改用 ConcurrentHashMap.newKeySet()，解决多线程竞争
+ * - save() 改为延迟批量写入（防抖），避免每条记录都触发全量磁盘 I/O
+ * - 常量统一引用 Constants
  */
 object ExposureLogManager {
 
-    private const val FILE_NAME = "exposure_log.json"
-    private const val MAX_RECORDS = 500
+    private const val TAG = "ExposureLog"
 
     private val records = CopyOnWriteArrayList<ExposureRecord>()
-    private val seenKeys = mutableSetOf<String>()
+
+    /** 线程安全的去重集合 —— 修复原来的 mutableSetOf 并发问题 */
+    private val seenKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     private var initialized = false
 
-    /**
-     * 初始化：从文件加载历史记录
-     */
+    // ── 延迟写入防抖 ──
+    private var saveJob: Job? = null
+    private val saveScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // ── 初始化 ──
+
     @Synchronized
     fun init(context: Context) {
         if (initialized) return
-        val file = File(context.filesDir, FILE_NAME)
+        val file = File(context.filesDir, Constants.EXPOSURE_LOG_FILE)
         if (file.exists()) {
             try {
                 val jsonArray = JSONArray(file.readText())
@@ -41,29 +51,29 @@ object ExposureLogManager {
                         records.add(record)
                     }
                 }
-                AppLogger.i("ExposureLog", "\u52a0\u8f7d\u4e86 ${records.size} \u6761\u66b4\u9732\u8bb0\u5f55")
+                AppLogger.i(TAG, "加载了 ${records.size} 条暴露记录")
             } catch (e: Exception) {
-                AppLogger.e("ExposureLog", "\u52a0\u8f7d\u66b4\u9732\u8bb0\u5f55\u5931\u8d25: ${e.message}")
+                AppLogger.e(TAG, "加载暴露记录失败: ${e.message}")
             }
         }
         initialized = true
     }
 
-    /**
-     * 重置会话去重（监控启动时调用）
-     */
+    // ── 会话管理 ──
+
     fun resetSession() {
         seenKeys.clear()
-        AppLogger.i("ExposureLog", "\u4f1a\u8bdd\u53bb\u91cd\u5df2\u91cd\u7f6e")
+        AppLogger.i(TAG, "会话去重已重置")
     }
 
+    // ── 扫描与记录 ──
+
     /**
-     * 扫描连接列表，自动记录新的暴露
+     * 扫描连接列表，自动记录新暴露
      * @return 本次新增的记录数
      */
     fun scanAndLog(context: Context, connections: List<ConnectionInfo>): Int {
         if (!initialized) init(context)
-
         var newCount = 0
 
         for (conn in connections) {
@@ -82,7 +92,6 @@ object ExposureLogManager {
                 }
             }
         }
-
         return newCount
     }
 
@@ -90,65 +99,89 @@ object ExposureLogManager {
         records.add(0, record)
 
         // 超过上限，删除最旧的
-        while (records.size > MAX_RECORDS) {
+        while (records.size > Constants.MAX_EXPOSURE_RECORDS) {
             records.removeAt(records.lastIndex)
         }
 
-        save(context)
-        AppLogger.i("ExposureLog",
-            "\u8bb0\u5f55\u66b4\u9732: ${record.displayType} | ${record.appName} | ${record.localIp}:${record.localPort}")
+        // 延迟批量写入（防抖），避免每条记录都触发全量 I/O
+        scheduleSave(context)
+
+        AppLogger.i(TAG, "记录暴露: ${record.displayType} | ${record.appName} | " +
+                "${record.localIp}:${record.localPort}")
     }
 
     /**
-     * 获取所有记录
+     * 防抖写入：在最后一次 addRecord 后延迟 EXPOSURE_DEBOUNCE_SAVE_MS 再执行写入，
+     * 连续添加多条记录只会触发一次磁盘写入
      */
+    private fun scheduleSave(context: Context) {
+        saveJob?.cancel()
+        saveJob = saveScope.launch {
+            delay(Constants.EXPOSURE_DEBOUNCE_SAVE_MS)
+            saveNow(context)
+        }
+    }
+
+    /** 立即写入（用于 clear / App 退出等场景） */
+    fun forceSave(context: Context) {
+        saveJob?.cancel()
+        saveNow(context)
+    }
+
+    private fun saveNow(context: Context) {
+        try {
+            val jsonArray = JSONArray()
+            for (record in records) {
+                jsonArray.put(record.toJson())
+            }
+            val file = File(context.filesDir, Constants.EXPOSURE_LOG_FILE)
+            file.writeText(jsonArray.toString())
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "保存暴露记录失败: ${e.message}")
+        }
+    }
+
+    // ── 查询 ──
+
     fun getRecords(): List<ExposureRecord> = records.toList()
 
-    /**
-     * 按类型筛选记录
-     */
     fun getRecordsByType(type: String): List<ExposureRecord> {
         return records.filter { it.type == type }
     }
 
-    /**
-     * 获取记录数量
-     */
     fun getCount(): Int = records.size
 
-    /**
-     * 清空所有记录
-     */
+    // ── 清空 ──
+
     fun clear(context: Context) {
         records.clear()
         seenKeys.clear()
-        save(context)
-        AppLogger.i("ExposureLog", "\u66b4\u9732\u8bb0\u5f55\u5df2\u6e05\u7a7a")
+        forceSave(context)
+        AppLogger.i(TAG, "暴露记录已清空")
     }
 
-    /**
-     * 导出为文本
-     */
+    // ── 导出 ──
+
     fun exportText(): String {
-        if (records.isEmpty()) return "\u65e0\u66b4\u9732\u8bb0\u5f55"
+        if (records.isEmpty()) return "无暴露记录"
 
         val sb = StringBuilder()
-        sb.appendLine("===== NetMonitor \u66b4\u9732\u8bb0\u5f55 =====")
-        sb.appendLine("\u5bfc\u51fa\u65f6\u95f4: " + SimpleDateFormat(
+        sb.appendLine("===== NetMonitor 暴露记录 =====")
+        sb.appendLine("导出时间: " + SimpleDateFormat(
             "yyyy-MM-dd HH:mm:ss", Locale.getDefault()
         ).format(Date()))
-        sb.appendLine("\u603b\u8bb0\u5f55\u6570: ${records.size}")
+        sb.appendLine("总记录数: ${records.size}")
         sb.appendLine()
 
         val ipLeaks = records.filter { it.type == "ip_leak" }
         val portExposed = records.filter { it.type == "port_exposed" }
 
-        sb.appendLine("--- \u771f\u5b9eIP\u66b4\u9732: ${ipLeaks.size} \u6761 ---")
+        sb.appendLine("--- 真实IP暴露: ${ipLeaks.size} 条 ---")
         for (r in ipLeaks) {
             sb.appendLine(r.format())
         }
 
-        sb.appendLine("--- \u7aef\u53e3\u66b4\u9732: ${portExposed.size} \u6761 ---")
+        sb.appendLine("--- 端口暴露: ${portExposed.size} 条 ---")
         for (r in portExposed) {
             sb.appendLine(r.format())
         }
@@ -157,19 +190,9 @@ object ExposureLogManager {
         return sb.toString()
     }
 
-    /**
-     * 保存到文件
-     */
-    private fun save(context: Context) {
-        try {
-            val jsonArray = JSONArray()
-            for (record in records) {
-                jsonArray.put(record.toJson())
-            }
-            val file = File(context.filesDir, FILE_NAME)
-            file.writeText(jsonArray.toString())
-        } catch (e: Exception) {
-            AppLogger.e("ExposureLog", "\u4fdd\u5b58\u66b4\u9732\u8bb0\u5f55\u5931\u8d25: ${e.message}")
-        }
+    /** 释放资源（App 退出时调用） */
+    fun destroy() {
+        saveJob?.cancel()
+        saveScope.cancel()
     }
 }
