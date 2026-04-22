@@ -5,4 +5,6 @@
     <string name="title_connections">连接</string>
     <string name="title_packets">抓包</string>
     <string name="title_settings">设置</string>
+    <string name="capture_running_title">抓包服务运行中</string>
+    <string name="capture_running_text">正在捕获网络数据包...</string>
 </resources>
