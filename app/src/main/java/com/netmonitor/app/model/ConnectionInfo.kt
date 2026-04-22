@@ -11,49 +11,93 @@ data class ConnectionInfo(
     val appName: String = "",
     val timestamp: Long = System.currentTimeMillis()
 ) {
-    val displayState: String
-        get() = when (state) {
-            "01" -> "ESTABLISHED"
-            "02" -> "SYN_SENT"
-            "03" -> "SYN_RECV"
-            "04" -> "FIN_WAIT1"
-            "05" -> "FIN_WAIT2"
-            "06" -> "TIME_WAIT"
-            "07" -> "CLOSE"
-            "08" -> "CLOSE_WAIT"
-            "09" -> "LAST_ACK"
-            "0A" -> "LISTEN"
-            "0B" -> "CLOSING"
-            else -> state
-        }
 
-    val isActive: Boolean
-        get() = state == "01" || displayState == "ESTABLISHED"
+    // ── 状态显示（区分 TCP / UDP） ──
+
+    private val tcpStateMap = mapOf(
+        "01" to "ESTABLISHED",
+        "02" to "SYN_SENT",
+        "03" to "SYN_RECV",
+        "04" to "FIN_WAIT1",
+        "05" to "FIN_WAIT2",
+        "06" to "TIME_WAIT",
+        "07" to "CLOSE",
+        "08" to "CLOSE_WAIT",
+        "09" to "LAST_ACK",
+        "0A" to "LISTEN",
+        "0B" to "CLOSING"
+    )
 
     /**
-     * 检测是否暴露了真实IP地址
-     * 本地地址是公网IP + 远程地址不是本地 + 正在通信
-     * → 该连接没走VPN/代理，直接暴露了真实IP
+     * UDP 状态码映射（/proc/net/udp 的 st 字段）
+     * UDP 是无连接协议，状态含义完全不同于 TCP：
+     * - 07 表示未绑定远端的 socket → IDLE（不是 TCP 的 CLOSE！）
+     * - 01 表示调用过 connect() 绑定了远端地址 → CONNECTED
      */
+    private val udpStateMap = mapOf(
+        "01" to "CONNECTED",
+        "07" to "IDLE"
+    )
+
+    val displayState: String
+        get() = when (protocol) {
+            "UDP" -> udpStateMap[state] ?: state
+            else  -> tcpStateMap[state] ?: state
+        }
+
+    // ── 连接状态判断 ──
+
+    val isActive: Boolean
+        get() = when (protocol) {
+            "UDP" -> state == "01"
+            else  -> state == "01"
+        }
+
+    /**
+     * 连接唯一标识 key，用于增量差异更新时比对新旧列表
+     */
+    val connectionKey: String
+        get() = "$protocol|$localIp:$localPort|$remoteIp:$remotePort|$uid"
+
+    // ── 清洗后的 IP 地址 ──
+
+    val cleanLocalIp: String
+        get() = cleanIp(localIp)
+
+    val cleanRemoteIp: String
+        get() = cleanIp(remoteIp)
+
+    private fun cleanIp(ip: String): String {
+        return ip.replace("::ffff:", "").trim()
+    }
+
+    // ── 暴露检测 ──
+
     val isRealIpExposed: Boolean
         get() {
             if (displayState != "ESTABLISHED") return false
-            if (isPrivateOrReservedIp(localIp)) return false
-            if (isPrivateOrReservedIp(remoteIp)) return false
+            if (isPrivateOrReservedIp(cleanLocalIp)) return false
+            if (isPrivateOrReservedIp(cleanRemoteIp)) return false
             return true
         }
 
-    /**
-     * 检测是否在所有网卡上监听（0.0.0.0 或 ::）
-     * 同一局域网内设备都能连，公共WiFi下有安全风险
-     */
     val isExposedListener: Boolean
         get() {
-            if (displayState != "LISTEN") return false
-            return isWildcardAddress(localIp)
+            val isListening = when (protocol) {
+                "TCP" -> displayState == "LISTEN"
+                "UDP" -> displayState == "IDLE" && localPort > 0
+                else -> false
+            }
+            return isListening && isWildcardAddress(cleanLocalIp)
         }
 
+    fun formatSummary(): String {
+        val dir = if (isActive) "↔" else if (displayState == "LISTEN" || displayState == "IDLE") "◉" else "·"
+        return "$protocol $dir $cleanLocalIp:$localPort → $cleanRemoteIp:$remotePort [$displayState] $appName"
+    }
+
     companion object {
+
         fun isPrivateOrReservedIp(ip: String): Boolean {
             val clean = ip.replace("::ffff:", "").trim()
             if (clean.startsWith("127.")) return true
