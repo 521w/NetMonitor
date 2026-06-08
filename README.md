@@ -69,6 +69,19 @@ Install the debug APK:
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## Verification
+
+Build was checked in Termux, but this environment currently cannot run the Android build because Java and Android SDK are not installed:
+
+```text
+java: command not found
+javac: command not found
+ANDROID_HOME=unset
+ANDROID_SDK_ROOT=unset
+```
+
+Use Android Studio, a configured Android SDK environment, or CI with Java + Android Gradle Plugin support for full APK verification.
+
 ## Permissions
 
 The app requests network, VPN, foreground-service, notification, package-query, boot, storage, and optional root/system-level permissions. Some protected permissions only work on rooted, system, or debug environments.
