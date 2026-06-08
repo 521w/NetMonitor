@@ -71,16 +71,25 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ## Verification
 
-Build was checked in Termux, but this environment currently cannot run the Android build because Java and Android SDK are not installed:
+GitHub Actions successfully builds the debug APK with JDK 17 and Gradle:
 
 ```text
+Workflow: Build Android APK
+Command: ./gradlew assembleDebug
+Run: https://github.com/521w/NetMonitor/actions/runs/27154631911
+Status: success
+```
+
+The local Termux environment was also checked, but it cannot run the Android build directly because Java and Android SDK are not installed:
+
+```text
+JAVA_HOME=unset
 java: command not found
-javac: command not found
 ANDROID_HOME=unset
 ANDROID_SDK_ROOT=unset
 ```
 
-Use Android Studio, a configured Android SDK environment, or CI with Java + Android Gradle Plugin support for full APK verification.
+Use Android Studio, a configured Android SDK environment, or GitHub Actions for repeatable APK verification.
 
 ## Permissions
 
